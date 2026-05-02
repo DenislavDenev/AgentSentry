@@ -1,0 +1,17 @@
+[tool.uv.workspace]
+members = [
+    "packages/agent-scout",
+    "packages/beacon",
+    "packages/watchtower",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[tool.pytest.ini_options]
+testpaths = ["packages"]
+addopts = "--import-mode=importlib"

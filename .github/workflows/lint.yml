@@ -1,0 +1,26 @@
+name: Lint (Python)
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  ruff:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          python-version: "3.12"
+
+      - name: Sync workspace
+        run: uv sync
+
+      - name: Check formatting
+        run: uv run ruff format --check .
+
+      - name: Lint
+        run: uv run ruff check .

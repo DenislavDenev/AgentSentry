@@ -1,0 +1,9 @@
+# Enforce LF on all text files so shell scripts work correctly on Linux targets
+* text=auto eol=lf
+
+# Binary files — no line-ending conversion
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff2 binary
+*.ttf binary

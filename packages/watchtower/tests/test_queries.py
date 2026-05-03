@@ -77,10 +77,20 @@ async def test_projects_after_ingest(client):
         "/ingest",
         json={
             "records": [
-                {**_BASE, "uuid": "u1", "message_id": "m1",
-                 "input_tokens": 300, "output_tokens": 100},
-                {**_BASE, "uuid": "u2", "message_id": "m2",
-                 "input_tokens": 200, "output_tokens": 80},
+                {
+                    **_BASE,
+                    "uuid": "u1",
+                    "message_id": "m1",
+                    "input_tokens": 300,
+                    "output_tokens": 100,
+                },
+                {
+                    **_BASE,
+                    "uuid": "u2",
+                    "message_id": "m2",
+                    "input_tokens": 200,
+                    "output_tokens": 80,
+                },
             ]
         },
     )
@@ -102,10 +112,17 @@ async def test_project_404(client):
 async def test_models_endpoint(client):
     await client.post(
         "/ingest",
-        json={"records": [
-            {**_BASE, "uuid": "u3", "message_id": "m3",
-             "input_tokens": 50, "output_tokens": 25},
-        ]},
+        json={
+            "records": [
+                {
+                    **_BASE,
+                    "uuid": "u3",
+                    "message_id": "m3",
+                    "input_tokens": 50,
+                    "output_tokens": 25,
+                },
+            ]
+        },
     )
     resp = await client.get("/models")
     assert resp.status_code == 200

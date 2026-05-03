@@ -23,8 +23,8 @@ msg_info()  { echo -e " ${INFO} ${YW}$*${CL}"; }
 msg_ok()    { echo -e " ${CM} ${GN}$*${CL}"; }
 msg_error() { echo -e " ${CROSS} ${RD}$*${CL}" >&2; exit 1; }
 
-# Suppress verbose output — only show msg_* lines
-STD=">/dev/null 2>&1"
+# Suppress verbose output from commands
+silence() { "$@" &>/dev/null; }
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -34,49 +34,51 @@ STATE_DIR="${STATE_DIR:-/var/lib/agentsentry/scout}"
 AGENT_DATA_DIR="${AGENT_DATA_DIR:-/data/agent-logs}"
 DB_NAME="${DB_NAME:-agentsentry}"
 DB_USER="${DB_USER:-agentsentry}"
+WATCHTOWER_PORT="${WATCHTOWER_PORT:-8000}"
+DASHBOARD_PORT="${DASHBOARD_PORT:-3000}"
+REPO="${REPO:-https://github.com/DenislavDenev/AgentSentry.git}"
+
+# Generate password without triggering pipefail
 if [[ -z "${DB_PASS:-}" ]]; then
   set +o pipefail
   DB_PASS=$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 16)
   set -o pipefail
 fi
-REPO="${REPO:-https://github.com/DenislavDenev/AgentSentry.git}"
-WATCHTOWER_PORT="${WATCHTOWER_PORT:-8000}"
-DASHBOARD_PORT="${DASHBOARD_PORT:-3000}"
 
 # ---------------------------------------------------------------------------
 # STEP 1 — System packages
 # ---------------------------------------------------------------------------
 msg_info "Updating system packages"
-apt-get update -qq $STD
-apt-get install -y --no-install-recommends curl ca-certificates gnupg lsb-release $STD
+silence apt-get update
+silence apt-get install -y --no-install-recommends curl ca-certificates gnupg lsb-release
 msg_ok "Base packages installed"
 
 msg_info "Adding PostgreSQL 16 repository"
 curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
-  | gpg --dearmor -o /usr/share/keyrings/postgresql.gpg $STD
+  | gpg --dearmor -o /usr/share/keyrings/postgresql.gpg 2>/dev/null
 echo "deb [signed-by=/usr/share/keyrings/postgresql.gpg] \
   https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
   > /etc/apt/sources.list.d/pgdg.list
-apt-get update -qq $STD
+silence apt-get update
 msg_ok "PostgreSQL repository added"
 
 msg_info "Adding Node.js 22 repository"
-curl -fsSL https://deb.nodesource.com/setup_22.x | bash - $STD
+curl -fsSL https://deb.nodesource.com/setup_22.x | silence bash -
 msg_ok "Node.js repository added"
 
 msg_info "Installing Python 3.12, Node.js 22, PostgreSQL 16"
-apt-get install -y --no-install-recommends \
+silence apt-get install -y --no-install-recommends \
   python3.12 python3.12-venv python3-pip \
   nodejs \
   postgresql-16 postgresql-client-16 \
-  git $STD
+  git
 msg_ok "System packages installed"
 
 # ---------------------------------------------------------------------------
 # STEP 2 — uv
 # ---------------------------------------------------------------------------
 msg_info "Installing uv"
-curl -LsSf https://astral.sh/uv/install.sh | sh $STD
+curl -LsSf https://astral.sh/uv/install.sh | silence sh
 export PATH="$HOME/.local/bin:$PATH"
 msg_ok "uv $(uv --version) installed"
 
@@ -84,15 +86,15 @@ msg_ok "uv $(uv --version) installed"
 # STEP 3 — pnpm
 # ---------------------------------------------------------------------------
 msg_info "Installing pnpm"
-corepack enable $STD
-corepack prepare pnpm@latest --activate $STD
+silence corepack enable
+silence corepack prepare pnpm@latest --activate
 msg_ok "pnpm $(pnpm --version) installed"
 
 # ---------------------------------------------------------------------------
 # STEP 4 — Clone repository
 # ---------------------------------------------------------------------------
 msg_info "Cloning AgentSentry"
-git clone "$REPO" "$INSTALL_DIR" $STD
+silence git clone "$REPO" "$INSTALL_DIR"
 msg_ok "Repository cloned to $INSTALL_DIR"
 
 # ---------------------------------------------------------------------------
@@ -100,7 +102,7 @@ msg_ok "Repository cloned to $INSTALL_DIR"
 # ---------------------------------------------------------------------------
 msg_info "Installing Python dependencies"
 cd "$INSTALL_DIR"
-uv sync --frozen --no-dev $STD
+silence uv sync --frozen --no-dev
 msg_ok "Python workspace ready"
 
 # ---------------------------------------------------------------------------
@@ -108,27 +110,27 @@ msg_ok "Python workspace ready"
 # ---------------------------------------------------------------------------
 msg_info "Installing dashboard dependencies"
 cd "$INSTALL_DIR/packages/dashboard"
-pnpm install --frozen-lockfile $STD
+silence pnpm install --frozen-lockfile
 msg_ok "Dashboard dependencies installed"
 
 msg_info "Building dashboard (Next.js standalone)"
-NEXT_TELEMETRY_DISABLED=1 pnpm build $STD
+NEXT_TELEMETRY_DISABLED=1 silence pnpm build
 msg_ok "Dashboard built"
 
 # ---------------------------------------------------------------------------
 # STEP 7 — PostgreSQL
 # ---------------------------------------------------------------------------
 msg_info "Starting PostgreSQL"
-systemctl enable --now postgresql $STD
+silence systemctl enable --now postgresql
 
 msg_info "Creating database user and database"
 sudo -u postgres psql -tc "SELECT 1 FROM pg_roles WHERE rolname='$DB_USER'" \
-  | grep -q 1 || \
-  sudo -u postgres psql -c "CREATE USER $DB_USER WITH PASSWORD '$DB_PASS';" $STD
+  | grep -q 1 \
+  || silence sudo -u postgres psql -c "CREATE USER $DB_USER WITH PASSWORD '$DB_PASS';"
 
 sudo -u postgres psql -tc "SELECT 1 FROM pg_database WHERE datname='$DB_NAME'" \
-  | grep -q 1 || \
-  sudo -u postgres psql -c "CREATE DATABASE $DB_NAME OWNER $DB_USER;" $STD
+  | grep -q 1 \
+  || silence sudo -u postgres psql -c "CREATE DATABASE $DB_NAME OWNER $DB_USER;"
 
 msg_ok "Database $DB_NAME created"
 
@@ -138,7 +140,7 @@ msg_ok "Database $DB_NAME created"
 msg_info "Running database migrations"
 cd "$INSTALL_DIR/packages/watchtower"
 DATABASE_URL="postgresql+asyncpg://$DB_USER:$DB_PASS@localhost:5432/$DB_NAME" \
-  uv run --no-sync alembic upgrade head $STD
+  silence uv run --no-sync alembic upgrade head
 msg_ok "Migrations complete"
 
 # ---------------------------------------------------------------------------
@@ -146,7 +148,6 @@ msg_ok "Migrations complete"
 # ---------------------------------------------------------------------------
 msg_info "Writing systemd service units"
 
-# Persist DB_PASS for the unit files
 UV_BIN="$HOME/.local/bin/uv"
 
 cat > /etc/systemd/system/agentsentry-watchtower.service <<EOF
@@ -209,20 +210,21 @@ RestartSec=5
 WantedBy=multi-user.target
 EOF
 
-systemctl daemon-reload $STD
-systemctl enable agentsentry-watchtower agentsentry-scout agentsentry-dashboard $STD
-systemctl start  agentsentry-watchtower agentsentry-scout agentsentry-dashboard $STD
+silence systemctl daemon-reload
+silence systemctl enable agentsentry-watchtower agentsentry-scout agentsentry-dashboard
+silence systemctl start agentsentry-watchtower agentsentry-scout agentsentry-dashboard
 msg_ok "Services enabled and started"
 
 # ---------------------------------------------------------------------------
 # Done
 # ---------------------------------------------------------------------------
+LAN_IP=$(hostname -I | awk '{print $1}')
 echo ""
 msg_ok "AgentSentry installation complete"
 echo ""
-echo -e "  ${GN}Dashboard${CL}  http://$(hostname -I | awk '{print $1}'):$DASHBOARD_PORT"
-echo -e "  ${GN}API      ${CL}  http://$(hostname -I | awk '{print $1}'):$WATCHTOWER_PORT"
+echo -e "  ${GN}Dashboard${CL}  http://${LAN_IP}:$DASHBOARD_PORT"
+echo -e "  ${GN}API      ${CL}  http://${LAN_IP}:$WATCHTOWER_PORT"
 echo ""
-echo -e "  ${YW}DB password stored in systemd unit — retrieve with:${CL}"
+echo -e "  ${YW}DB password stored in systemd unit. Retrieve with:${CL}"
 echo -e "  systemctl cat agentsentry-watchtower | grep DATABASE_URL"
 echo ""

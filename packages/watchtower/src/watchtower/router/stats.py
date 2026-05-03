@@ -51,7 +51,7 @@ async def daily(
                 COALESCE(SUM(input_tokens + output_tokens), 0)              AS total_tokens,
                 COUNT(DISTINCT session_id)                                  AS session_count
             FROM messages
-            WHERE recorded_at >= NOW() - (:days || ' days')::INTERVAL
+            WHERE recorded_at >= NOW() - (INTERVAL '1 day' * :days)
             GROUP BY DATE(recorded_at)
             ORDER BY DATE(recorded_at)
         """),

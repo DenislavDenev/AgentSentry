@@ -12,7 +12,12 @@ interface Props {
 export function ToolsBarChart({ data, height = 260 }: Props) {
   const ref = useRef<HTMLDivElement>(null)
 
-  const top10 = [...data].sort((a, b) => b.invocation_count - a.invocation_count).slice(0, 10)
+  // Sort descending, take top 10, reverse so ECharts renders highest at top
+  // (ECharts horizontal bar draws Y categories bottom→top).
+  const top10 = [...data]
+    .sort((a, b) => b.invocation_count - a.invocation_count)
+    .slice(0, 10)
+    .reverse()
 
   useEffect(() => {
     if (!ref.current || top10.length === 0) return

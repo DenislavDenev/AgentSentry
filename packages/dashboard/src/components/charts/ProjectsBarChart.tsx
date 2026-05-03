@@ -11,8 +11,6 @@ interface Props {
 
 // Shorten the long Claude Code project slugs for display
 function shortSlug(slug: string): string {
-  // Slugs look like: C--Users-Name-Documents-project--worktrees-branchname-hash
-  // Try to extract the meaningful part after the last double-dash segment
   const parts = slug.split("--")
   const last = parts[parts.length - 1]
   if (last && last.length > 4) return last.replace(/-[a-f0-9]{6,}$/, "")
@@ -22,7 +20,12 @@ function shortSlug(slug: string): string {
 export function ProjectsBarChart({ data, height = 280 }: Props) {
   const ref = useRef<HTMLDivElement>(null)
 
-  const top8 = [...data].sort((a, b) => b.total_tokens - a.total_tokens).slice(0, 8)
+  // Sort descending by total tokens, take top 8, then REVERSE so ECharts
+  // horizontal bar renders highest at the top (ECharts draws Y categories bottom→top).
+  const top8 = [...data]
+    .sort((a, b) => b.total_tokens - a.total_tokens)
+    .slice(0, 8)
+    .reverse()
 
   useEffect(() => {
     if (!ref.current || top8.length === 0) return
@@ -40,20 +43,25 @@ export function ProjectsBarChart({ data, height = 280 }: Props) {
           textStyle: { color: "#9ca3af" },
           bottom: 0,
         },
-        grid: { top: 16, bottom: 56, left: 100, right: 16 },
+        grid: { top: 16, bottom: 48, left: 110, right: 16 },
         xAxis: {
           type: "value",
           axisLabel: {
             color: "#6b7280",
             fontSize: 10,
-            formatter: (v: number) => (v >= 1000 ? `${(v / 1000).toFixed(0)}K` : String(v)),
+            formatter: (v: number) =>
+              v >= 1_000_000
+                ? `${(v / 1_000_000).toFixed(1)}M`
+                : v >= 1000
+                  ? `${(v / 1000).toFixed(0)}K`
+                  : String(v),
           },
           splitLine: { lineStyle: { color: "#1f2937" } },
         },
         yAxis: {
           type: "category",
           data: top8.map((p) => shortSlug(p.slug)),
-          axisLabel: { color: "#6b7280", fontSize: 10 },
+          axisLabel: { color: "#9ca3af", fontSize: 10 },
           axisLine: { lineStyle: { color: "#374151" } },
         },
         series: [
@@ -61,13 +69,13 @@ export function ProjectsBarChart({ data, height = 280 }: Props) {
             name: "Input",
             type: "bar",
             data: top8.map((p) => p.input_tokens),
-            itemStyle: { color: "#6366f1" },
+            itemStyle: { color: "#38bdf8" }, // light blue
           },
           {
             name: "Output",
             type: "bar",
             data: top8.map((p) => p.output_tokens),
-            itemStyle: { color: "#8b5cf6" },
+            itemStyle: { color: "#818cf8" }, // indigo
           },
         ],
       })

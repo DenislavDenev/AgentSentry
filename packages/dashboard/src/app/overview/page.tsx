@@ -3,10 +3,10 @@ import { ModelPieChart } from "@/components/charts/ModelPieChart"
 import { ProjectsBarChart } from "@/components/charts/ProjectsBarChart"
 import { ToolsBarChart } from "@/components/charts/ToolsBarChart"
 import { SessionsTable } from "@/components/tables/SessionsTable"
+import { CostCard } from "@/components/ui/CostCard"
 import { StatCard } from "@/components/ui/StatCard"
 import { api } from "@/lib/api"
-import { fmtCost, fmtPct, fmtTokens } from "@/lib/format"
-import { calcCostGeneric } from "@/lib/pricing"
+import { fmtPct, fmtTokens } from "@/lib/format"
 
 export default async function OverviewPage() {
   const [overview, daily, models, sessions, projects, tools] = await Promise.all([
@@ -18,10 +18,7 @@ export default async function OverviewPage() {
     api.tools().catch(() => []),
   ])
 
-  // Plan is client-side (localStorage); SSR defaults to "api" for cost display
-  const plan = "api" as const
-
-  const stats = overview ?? {
+  const s = overview ?? {
     total_sessions: 0,
     total_messages: 0,
     input_tokens: 0,
@@ -33,36 +30,24 @@ export default async function OverviewPage() {
     cache_efficiency_pct: 0,
   }
 
-  const cacheCreateTotal = stats.cache_create_5m_tokens + stats.cache_create_1h_tokens
-  const estimatedCost = calcCostGeneric(
-    stats.input_tokens,
-    stats.output_tokens,
-    stats.cache_read_tokens,
-    plan,
-  )
+  const cacheCreate = s.cache_create_5m_tokens + s.cache_create_1h_tokens
 
   return (
     <div className="space-y-6">
       <h1 className="text-xl font-semibold">Overview</h1>
 
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
-        <StatCard label="Total tokens" value={fmtTokens(stats.total_tokens)} />
-        <StatCard label="Sessions" value={String(stats.total_sessions)} />
-        <StatCard label="Messages" value={String(stats.total_messages)} />
-        <StatCard
-          label="Cache efficiency"
-          value={fmtPct(stats.cache_efficiency_pct)}
-          sub="reads / (input + reads)"
-        />
-        <StatCard
-          label="Cache created"
-          value={fmtTokens(cacheCreateTotal)}
-          sub="5m + 1h tokens"
-        />
-        <StatCard
-          label="Est. cost"
-          value={plan === "api" ? fmtCost(estimatedCost) : "N/A"}
-          sub={plan === "api" ? "API rates · Sonnet" : "Subscription plan"}
+      {/* 7 KPI cards matching token-dashboard */}
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 lg:grid-cols-7">
+        <StatCard label="Sessions" value={String(s.total_sessions)} />
+        <StatCard label="Turns" value={String(s.total_messages)} sub="messages" />
+        <StatCard label="Input tokens" value={fmtTokens(s.input_tokens)} />
+        <StatCard label="Output tokens" value={fmtTokens(s.output_tokens)} />
+        <StatCard label="Cache read" value={fmtTokens(s.cache_read_tokens)} />
+        <StatCard label="Cache write" value={fmtTokens(cacheCreate)} sub="5m + 1h" />
+        <CostCard
+          inputTokens={s.input_tokens}
+          outputTokens={s.output_tokens}
+          cacheReadTokens={s.cache_read_tokens}
         />
       </div>
 
@@ -80,12 +65,12 @@ export default async function OverviewPage() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <div className="rounded-lg border border-gray-800 bg-gray-900 p-4">
           <h2 className="mb-3 text-sm font-medium text-gray-400">
-            Top projects by token spend
+            Top projects · token spend
           </h2>
           <ProjectsBarChart data={projects} />
         </div>
         <div className="rounded-lg border border-gray-800 bg-gray-900 p-4">
-          <h2 className="mb-3 text-sm font-medium text-gray-400">Top tools by invocations</h2>
+          <h2 className="mb-3 text-sm font-medium text-gray-400">Top tools · invocations</h2>
           <ToolsBarChart data={tools} />
         </div>
       </div>

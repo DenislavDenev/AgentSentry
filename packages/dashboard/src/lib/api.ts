@@ -10,7 +10,13 @@ import type {
   ToolStat,
 } from "@/lib/types"
 
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
+// Server-side: use the direct Watchtower URL (internal network, no proxy needed).
+// Browser-side: use the /api proxy rewrite defined in next.config.ts so requests
+// work regardless of the LAN IP the dashboard is accessed from.
+const BASE =
+  typeof window === "undefined"
+    ? (process.env.WATCHTOWER_URL ?? "http://localhost:8000")
+    : "/api"
 
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(`${BASE}${path}`, { cache: "no-store" })

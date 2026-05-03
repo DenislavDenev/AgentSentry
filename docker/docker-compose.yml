@@ -10,7 +10,7 @@ services:
     environment:
       POSTGRES_DB: agentsentry
       POSTGRES_USER: agentsentry
-      POSTGRES_PASSWORD: changeme   # Override via .env or Docker secrets before production use
+      POSTGRES_PASSWORD: changeme   # Override via .env before production use
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -20,37 +20,12 @@ services:
       retries: 5
 
   # -------------------------------------------------------------------------
-  # AgentScout — filesystem watcher
-  # IMPORTANT: Mount the agent log directory from the source machine here.
-  #   Option A (NFS/CIFS already mounted on Docker host):
-  #     - /mnt/agent-logs:/data/agent-logs:ro
-  #   Option B (directly from this machine if agent runs here):
-  #     - ${AGENT_DATA_DIR:-~/.claude}:/data/agent-logs:ro
-  # The container reads AGENT_DATA_DIR=/data/agent-logs at runtime.
-  # -------------------------------------------------------------------------
-  agent-scout:
-    build:
-      context: ../packages/agent-scout
-      dockerfile: Dockerfile   # Phase 6
-    restart: unless-stopped
-    environment:
-      AGENT_DATA_DIR: /data/agent-logs
-      BEACON_URL: http://beacon:8001
-    volumes:
-      # Uncomment and set the correct source path for your environment:
-      # - /host/path/to/.claude:/data/agent-logs:ro
-      []
-    depends_on:
-      - beacon
-
-  # -------------------------------------------------------------------------
-  # Watchtower — FastAPI + PostgreSQL API
-  # The Beacon (parser) runs in-process inside agent-scout — not a separate service.
+  # Watchtower — FastAPI + PostgreSQL API (runs migrations on startup)
   # -------------------------------------------------------------------------
   watchtower:
     build:
-      context: ../packages/watchtower
-      dockerfile: Dockerfile   # Phase 6
+      context: ..
+      dockerfile: packages/watchtower/Dockerfile
     restart: unless-stopped
     environment:
       DATABASE_URL: postgresql+asyncpg://agentsentry:changeme@postgres:5432/agentsentry
@@ -61,12 +36,39 @@ services:
         condition: service_healthy
 
   # -------------------------------------------------------------------------
-  # AgentSentry Dashboard — Next.js (standalone output)
+  # AgentScout — filesystem watcher + in-process Beacon parser
+  #
+  # IMPORTANT: Mount the agent log directory from the source machine.
+  #   Option A (NFS/CIFS already mounted on Docker host):
+  #     - /mnt/agent-logs:/data/agent-logs:ro
+  #   Option B (agent runs on this same machine):
+  #     - ${AGENT_DATA_DIR:-~/.claude}:/data/agent-logs:ro
+  #   Option C (Proxmox LXC bind-mount — set up on the Proxmox host):
+  #     mp0: /mnt/host/agent-logs,mp=/data/agent-logs,ro=1
+  # -------------------------------------------------------------------------
+  agent-scout:
+    build:
+      context: ..
+      dockerfile: packages/agent-scout/Dockerfile
+    restart: unless-stopped
+    environment:
+      AGENT_DATA_DIR: /data/agent-logs
+      STATE_DIR: /var/lib/agentsentry/scout
+      WATCHTOWER_URL: http://watchtower:8000
+    volumes:
+      # Uncomment one of the options above and set the correct source path:
+      # - /host/path/to/.claude:/data/agent-logs:ro
+      - scout_state:/var/lib/agentsentry/scout
+    depends_on:
+      - watchtower
+
+  # -------------------------------------------------------------------------
+  # AgentSentry Dashboard — Next.js standalone server
   # -------------------------------------------------------------------------
   dashboard:
     build:
-      context: ../packages/dashboard
-      dockerfile: Dockerfile   # Phase 6
+      context: ..
+      dockerfile: packages/dashboard/Dockerfile
     restart: unless-stopped
     environment:
       NEXT_PUBLIC_API_URL: http://watchtower:8000
@@ -78,4 +80,6 @@ services:
 
 volumes:
   postgres_data:
+    driver: local
+  scout_state:
     driver: local

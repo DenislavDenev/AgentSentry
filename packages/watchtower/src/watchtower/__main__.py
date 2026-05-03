@@ -5,7 +5,7 @@ from fastapi import FastAPI
 
 from watchtower.config import config
 from watchtower.db import shutdown, startup
-from watchtower.router import ingest, models, projects, sessions, stats, tools
+from watchtower.router import ingest, models, projects, prompts, sessions, stats, tools
 
 logging.basicConfig(level=config.log_level.upper())
 
@@ -17,6 +17,7 @@ app.include_router(projects.router)
 app.include_router(stats.router)
 app.include_router(models.router)
 app.include_router(tools.router)
+app.include_router(prompts.router)
 
 
 @app.on_event("startup")

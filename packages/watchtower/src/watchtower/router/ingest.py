@@ -70,8 +70,16 @@ async def ingest(body: IngestRequest, conn: AsyncConnection = Depends(get_conn))
                 if row is None:
                     continue
                 msg_uuid = row[0]
+                # Remove stale tool_calls before re-inserting — the pre-DELETE above
+                # handles the different-uuid case via ON DELETE CASCADE, but when the
+                # uuid already existed (DO UPDATE path) the old rows survive.
+                if rec.tool_calls:
+                    await conn.execute(
+                        text("DELETE FROM tool_calls WHERE message_uuid = :uuid"),
+                        {"uuid": msg_uuid},
+                    )
             else:
-                await conn.execute(
+                result = await conn.execute(
                     text("""
                         INSERT INTO messages (
                             uuid, message_id, session_id, project_slug, record_type, model,
@@ -83,10 +91,16 @@ async def ingest(body: IngestRequest, conn: AsyncConnection = Depends(get_conn))
                             :in_tok, :out_tok, :cr_tok, :cc5_tok, :cc1_tok,
                             :ptxt, :pchars, :sidechain, :agent_id, :recorded_at
                         )
-                        ON CONFLICT DO NOTHING
+                        ON CONFLICT (uuid) DO NOTHING
+                        RETURNING uuid
                     """),
                     _msg_params(rec),
                 )
+                row = result.fetchone()
+                # If the user record already existed (DO NOTHING fired), skip its
+                # tool_calls too — they were inserted on the original ingest.
+                if row is None:
+                    continue
                 msg_uuid = rec.uuid
 
             for tc in rec.tool_calls:

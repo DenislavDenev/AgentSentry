@@ -34,7 +34,11 @@ STATE_DIR="${STATE_DIR:-/var/lib/agentsentry/scout}"
 AGENT_DATA_DIR="${AGENT_DATA_DIR:-/data/agent-logs}"
 DB_NAME="${DB_NAME:-agentsentry}"
 DB_USER="${DB_USER:-agentsentry}"
-DB_PASS="${DB_PASS:-$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 16)}"
+if [[ -z "${DB_PASS:-}" ]]; then
+  set +o pipefail
+  DB_PASS=$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 16)
+  set -o pipefail
+fi
 REPO="${REPO:-https://github.com/DenislavDenev/AgentSentry.git}"
 WATCHTOWER_PORT="${WATCHTOWER_PORT:-8000}"
 DASHBOARD_PORT="${DASHBOARD_PORT:-3000}"

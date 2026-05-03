@@ -77,12 +77,14 @@ fi
 # ---------------------------------------------------------------------------
 # Prompt for agent data directory (bind-mount source on Proxmox host)
 # ---------------------------------------------------------------------------
-echo ""
-echo -e " ${YW}Enter the path on this Proxmox host that contains the .claude agent logs.${CL}"
-echo -e " ${YW}This directory will be bind-mounted read-only into the LXC.${CL}"
-echo -e " ${YW}Example: /mnt/agent-logs  or  /home/user/.claude${CL}"
-echo ""
-read -r -p " AGENT_DATA_DIR (Proxmox host path): " AGENT_DATA_HOST
+if [[ -z "${AGENT_DATA_HOST:-}" ]]; then
+  echo ""
+  echo -e " ${YW}Enter the path on this Proxmox host that contains the .claude agent logs.${CL}"
+  echo -e " ${YW}This directory will be bind-mounted read-only into the LXC.${CL}"
+  echo -e " ${YW}Example: /mnt/agent-logs  or  /home/user/.claude${CL}"
+  echo ""
+  read -r -p " AGENT_DATA_DIR (Proxmox host path): " AGENT_DATA_HOST
+fi
 
 [[ -d "$AGENT_DATA_HOST" ]] || msg_error "Directory not found: $AGENT_DATA_HOST"
 

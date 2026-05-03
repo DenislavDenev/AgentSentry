@@ -2,18 +2,30 @@
 
 import { useEffect, useRef } from "react"
 
-import type { DailyStats } from "@/lib/types"
+import type { ProjectSummary } from "@/lib/types"
 
 interface Props {
-  data: DailyStats[]
+  data: ProjectSummary[]
   height?: number
 }
 
-export function DailyBarChart({ data, height = 280 }: Props) {
+// Shorten the long Claude Code project slugs for display
+function shortSlug(slug: string): string {
+  // Slugs look like: C--Users-Name-Documents-project--worktrees-branchname-hash
+  // Try to extract the meaningful part after the last double-dash segment
+  const parts = slug.split("--")
+  const last = parts[parts.length - 1]
+  if (last && last.length > 4) return last.replace(/-[a-f0-9]{6,}$/, "")
+  return slug.slice(-30)
+}
+
+export function ProjectsBarChart({ data, height = 280 }: Props) {
   const ref = useRef<HTMLDivElement>(null)
 
+  const top8 = [...data].sort((a, b) => b.total_tokens - a.total_tokens).slice(0, 8)
+
   useEffect(() => {
-    if (!ref.current || data.length === 0) return
+    if (!ref.current || top8.length === 0) return
 
     let chart: import("echarts").ECharts | null = null
 
@@ -24,54 +36,38 @@ export function DailyBarChart({ data, height = 280 }: Props) {
         backgroundColor: "transparent",
         tooltip: { trigger: "axis" },
         legend: {
-          data: ["Input", "Output", "Cache read", "Cache create"],
+          data: ["Input", "Output"],
           textStyle: { color: "#9ca3af" },
           bottom: 0,
         },
-        grid: { top: 16, bottom: 48, left: 48, right: 16 },
+        grid: { top: 16, bottom: 56, left: 100, right: 16 },
         xAxis: {
-          type: "category",
-          data: data.map((d) => d.date),
-          axisLabel: { color: "#6b7280", fontSize: 11 },
-          axisLine: { lineStyle: { color: "#374151" } },
-        },
-        yAxis: {
           type: "value",
           axisLabel: {
             color: "#6b7280",
-            fontSize: 11,
+            fontSize: 10,
             formatter: (v: number) => (v >= 1000 ? `${(v / 1000).toFixed(0)}K` : String(v)),
           },
           splitLine: { lineStyle: { color: "#1f2937" } },
+        },
+        yAxis: {
+          type: "category",
+          data: top8.map((p) => shortSlug(p.slug)),
+          axisLabel: { color: "#6b7280", fontSize: 10 },
+          axisLine: { lineStyle: { color: "#374151" } },
         },
         series: [
           {
             name: "Input",
             type: "bar",
-            stack: "tokens",
-            data: data.map((d) => d.input_tokens),
+            data: top8.map((p) => p.input_tokens),
             itemStyle: { color: "#6366f1" },
           },
           {
             name: "Output",
             type: "bar",
-            stack: "tokens",
-            data: data.map((d) => d.output_tokens),
+            data: top8.map((p) => p.output_tokens),
             itemStyle: { color: "#8b5cf6" },
-          },
-          {
-            name: "Cache read",
-            type: "bar",
-            stack: "tokens",
-            data: data.map((d) => d.cache_read_tokens),
-            itemStyle: { color: "#06b6d4" },
-          },
-          {
-            name: "Cache create",
-            type: "bar",
-            stack: "tokens",
-            data: data.map((d) => d.cache_create_tokens),
-            itemStyle: { color: "#10b981" },
           },
         ],
       })
@@ -84,9 +80,9 @@ export function DailyBarChart({ data, height = 280 }: Props) {
       observer.disconnect()
       chart?.dispose()
     }
-  }, [data])
+  }, [top8])
 
-  if (data.length === 0) {
+  if (top8.length === 0) {
     return (
       <div
         style={{ height }}

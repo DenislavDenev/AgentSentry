@@ -46,6 +46,7 @@ export interface DailyStats {
   input_tokens: number
   output_tokens: number
   cache_read_tokens: number
+  cache_create_tokens: number
   total_tokens: number
   session_count: number
 }
@@ -60,6 +61,8 @@ export interface OverviewStats {
   input_tokens: number
   output_tokens: number
   cache_read_tokens: number
+  cache_create_5m_tokens: number
+  cache_create_1h_tokens: number
   total_tokens: number
   cache_efficiency_pct: number
 }
@@ -86,5 +89,6 @@ export interface PromptStat {
   project_slug: string
   prompt_text: string
   prompt_chars: number
+  input_tokens: number
   recorded_at: string
 }

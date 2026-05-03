@@ -83,6 +83,7 @@ class DailyStats(BaseModel):
     input_tokens: int
     output_tokens: int
     cache_read_tokens: int
+    cache_create_tokens: int
     total_tokens: int
     session_count: int
 
@@ -97,6 +98,8 @@ class OverviewStats(BaseModel):
     input_tokens: int
     output_tokens: int
     cache_read_tokens: int
+    cache_create_5m_tokens: int
+    cache_create_1h_tokens: int
     total_tokens: int
     cache_efficiency_pct: float
 
@@ -115,3 +118,13 @@ class ToolStat(BaseModel):
     result_tokens: int
     error_count: int
     error_rate_pct: float
+
+
+class PromptStat(BaseModel):
+    uuid: str
+    session_id: str
+    project_slug: str
+    prompt_text: str
+    prompt_chars: int
+    input_tokens: int
+    recorded_at: str

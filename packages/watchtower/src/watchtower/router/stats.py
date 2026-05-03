@@ -13,12 +13,14 @@ async def overview(conn: AsyncConnection = Depends(get_conn)) -> OverviewStats:
     row = await conn.execute(
         text("""
             SELECT
-                COUNT(DISTINCT session_id)                 AS total_sessions,
-                COUNT(*)                                   AS total_messages,
-                COALESCE(SUM(input_tokens), 0)             AS input_tokens,
-                COALESCE(SUM(output_tokens), 0)            AS output_tokens,
-                COALESCE(SUM(cache_read_tokens), 0)        AS cache_read_tokens,
-                COALESCE(SUM(input_tokens + output_tokens), 0) AS total_tokens
+                COUNT(DISTINCT session_id)                              AS total_sessions,
+                COUNT(*)                                                AS total_messages,
+                COALESCE(SUM(input_tokens), 0)                         AS input_tokens,
+                COALESCE(SUM(output_tokens), 0)                        AS output_tokens,
+                COALESCE(SUM(cache_read_tokens), 0)                    AS cache_read_tokens,
+                COALESCE(SUM(cache_create_5m_tokens), 0)               AS cache_create_5m_tokens,
+                COALESCE(SUM(cache_create_1h_tokens), 0)               AS cache_create_1h_tokens,
+                COALESCE(SUM(input_tokens + output_tokens), 0)         AS total_tokens
             FROM messages
         """)
     )
@@ -39,12 +41,13 @@ async def daily(
     rows = await conn.execute(
         text("""
             SELECT
-                DATE(recorded_at)::TEXT                    AS date,
-                COALESCE(SUM(input_tokens), 0)             AS input_tokens,
-                COALESCE(SUM(output_tokens), 0)            AS output_tokens,
-                COALESCE(SUM(cache_read_tokens), 0)        AS cache_read_tokens,
-                COALESCE(SUM(input_tokens + output_tokens), 0) AS total_tokens,
-                COUNT(DISTINCT session_id)                 AS session_count
+                DATE(recorded_at)::TEXT                                     AS date,
+                COALESCE(SUM(input_tokens), 0)                              AS input_tokens,
+                COALESCE(SUM(output_tokens), 0)                             AS output_tokens,
+                COALESCE(SUM(cache_read_tokens), 0)                         AS cache_read_tokens,
+                COALESCE(SUM(cache_create_5m_tokens + cache_create_1h_tokens), 0) AS cache_create_tokens,
+                COALESCE(SUM(input_tokens + output_tokens), 0)              AS total_tokens,
+                COUNT(DISTINCT session_id)                                  AS session_count
             FROM messages
             WHERE recorded_at >= NOW() - (:days || ' days')::INTERVAL
             GROUP BY DATE(recorded_at)

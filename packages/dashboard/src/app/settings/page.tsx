@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from "react"
 
-import { getPlanLabel, type PricingPlan } from "@/lib/pricing"
+import { getPlanLabel, MODEL_RATES, type PricingPlan } from "@/lib/pricing"
 
-const PLANS: PricingPlan[] = ["api", "pro", "max"]
+const PLANS: PricingPlan[] = ["api", "pro", "max", "max20x"]
 const STORAGE_KEY = "agentsentry:pricing-plan"
 
 export default function SettingsPage() {
@@ -13,7 +13,9 @@ export default function SettingsPage() {
 
   useEffect(() => {
     const stored = localStorage.getItem(STORAGE_KEY)
-    if (stored === "api" || stored === "pro" || stored === "max") setPlan(stored)
+    if (stored === "api" || stored === "pro" || stored === "max" || stored === "max20x") {
+      setPlan(stored)
+    }
   }, [])
 
   function save() {
@@ -29,8 +31,8 @@ export default function SettingsPage() {
       <div className="max-w-md rounded-lg border border-gray-800 bg-gray-900 p-5">
         <h2 className="mb-1 text-sm font-medium text-gray-300">Pricing plan</h2>
         <p className="mb-4 text-xs text-gray-500">
-          Determines how token costs are calculated in the dashboard. Pro/Max plans show token
-          counts only; API plan applies per-token rates.
+          Determines how token costs are calculated. Pro/Max plans show token counts only; API
+          plan applies per-token rates.
         </p>
 
         <div className="space-y-2">
@@ -58,6 +60,39 @@ export default function SettingsPage() {
         >
           {saved ? "Saved" : "Save"}
         </button>
+      </div>
+
+      <div className="max-w-2xl rounded-lg border border-gray-800 bg-gray-900 p-5">
+        <h2 className="mb-1 text-sm font-medium text-gray-300">API pricing reference</h2>
+        <p className="mb-4 text-xs text-gray-500">
+          Per-million-token USD rates applied when plan is set to API.
+        </p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b border-gray-800 text-left text-gray-500 uppercase tracking-wider">
+                <th className="py-2 pr-4 font-medium">Model</th>
+                <th className="py-2 pr-4 font-medium text-right">Input</th>
+                <th className="py-2 pr-4 font-medium text-right">Output</th>
+                <th className="py-2 pr-4 font-medium text-right">Cache read</th>
+                <th className="py-2 pr-4 font-medium text-right">Cache 5m</th>
+                <th className="py-2 font-medium text-right">Cache 1h</th>
+              </tr>
+            </thead>
+            <tbody>
+              {Object.entries(MODEL_RATES).map(([model, r]) => (
+                <tr key={model} className="border-b border-gray-800/50">
+                  <td className="py-2 pr-4 font-medium text-gray-300 capitalize">{model}</td>
+                  <td className="py-2 pr-4 text-right tabular-nums text-gray-400">${r.input}</td>
+                  <td className="py-2 pr-4 text-right tabular-nums text-gray-400">${r.output}</td>
+                  <td className="py-2 pr-4 text-right tabular-nums text-gray-400">${r.cacheRead}</td>
+                  <td className="py-2 pr-4 text-right tabular-nums text-gray-400">${r.cacheCreate5m}</td>
+                  <td className="py-2 text-right tabular-nums text-gray-400">${r.cacheCreate1h}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   )

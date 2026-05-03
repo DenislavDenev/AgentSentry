@@ -4,6 +4,7 @@ interface TipCardProps {
   title: string
   body: string
   severity: Severity
+  onDismiss?: () => void
 }
 
 const SEVERITY_STYLES: Record<Severity, string> = {
@@ -18,14 +19,23 @@ const BADGE_STYLES: Record<Severity, string> = {
   low: "bg-gray-700 text-gray-300",
 }
 
-export function TipCard({ title, body, severity }: TipCardProps) {
+export function TipCard({ title, body, severity, onDismiss }: TipCardProps) {
   return (
     <div className={`rounded-lg border px-5 py-4 ${SEVERITY_STYLES[severity]}`}>
       <div className="flex items-center gap-2">
         <span className={`rounded px-2 py-0.5 text-xs font-medium ${BADGE_STYLES[severity]}`}>
           {severity.toUpperCase()}
         </span>
-        <p className="text-sm font-semibold text-gray-100">{title}</p>
+        <p className="flex-1 text-sm font-semibold text-gray-100">{title}</p>
+        {onDismiss && (
+          <button
+            onClick={onDismiss}
+            className="text-xs text-gray-600 hover:text-gray-400 transition-colors"
+            title="Dismiss for 14 days"
+          >
+            Dismiss
+          </button>
+        )}
       </div>
       <p className="mt-2 text-sm text-gray-400">{body}</p>
     </div>

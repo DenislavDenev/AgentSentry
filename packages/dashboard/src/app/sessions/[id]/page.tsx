@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation"
 
+import { ModelBadge } from "@/components/ui/ModelBadge"
 import { api } from "@/lib/api"
 import { fmtDate, fmtDuration, fmtTokens, truncate } from "@/lib/format"
 
@@ -61,7 +62,7 @@ export default async function SessionDetailPage({ params }: Props) {
                       {m.record_type}
                     </span>
                   </td>
-                  <td className="py-2 pr-4 text-xs text-gray-500">{m.model ?? "--"}</td>
+                  <td className="py-2 pr-4"><ModelBadge model={m.model} /></td>
                   <td className="py-2 pr-4 text-xs text-gray-500">{fmtDate(m.recorded_at)}</td>
                   <td className="py-2 pr-4 text-right tabular-nums text-xs">
                     {fmtTokens(m.input_tokens)}

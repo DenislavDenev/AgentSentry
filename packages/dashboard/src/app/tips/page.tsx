@@ -137,8 +137,8 @@ export default function TipsPage() {
         <p className="text-sm text-gray-500">No suggestions right now. Check back after more activity.</p>
       ) : (
         <div className="space-y-3">
-          {visible.map((tip) => (
-            <TipCard key={tip.key} {...tip} onDismiss={() => dismiss(tip.key)} />
+          {visible.map(({ key, ...rest }) => (
+            <TipCard key={key} {...rest} onDismiss={() => dismiss(key)} />
           ))}
         </div>
       )}

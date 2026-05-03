@@ -22,6 +22,7 @@ async def list_tools(conn: AsyncConnection = Depends(get_conn)) -> list[ToolStat
                     1
                 )                                      AS error_rate_pct
             FROM tool_calls
+            WHERE tool_name NOT LIKE '\_%' ESCAPE '\'
             GROUP BY tool_name
             ORDER BY invocation_count DESC
         """)

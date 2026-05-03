@@ -20,6 +20,9 @@ async def list_models(conn: AsyncConnection = Depends(get_conn)) -> list[ModelSt
                 COUNT(*)                                   AS message_count
             FROM messages
             WHERE record_type = 'assistant'
+              AND model IS NOT NULL
+              AND model != '<synthetic>'
+              AND model NOT IN ('synthetic', 'unknown')
             GROUP BY model
             ORDER BY total_tokens DESC
         """)

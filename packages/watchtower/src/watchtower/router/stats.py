@@ -45,7 +45,9 @@ async def daily(
                 COALESCE(SUM(input_tokens), 0)                              AS input_tokens,
                 COALESCE(SUM(output_tokens), 0)                             AS output_tokens,
                 COALESCE(SUM(cache_read_tokens), 0)                         AS cache_read_tokens,
-                COALESCE(SUM(cache_create_5m_tokens + cache_create_1h_tokens), 0) AS cache_create_tokens,
+                COALESCE(
+                    SUM(cache_create_5m_tokens + cache_create_1h_tokens), 0
+                )                                                           AS cache_create_tokens,
                 COALESCE(SUM(input_tokens + output_tokens), 0)              AS total_tokens,
                 COUNT(DISTINCT session_id)                                  AS session_count
             FROM messages

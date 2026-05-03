@@ -19,19 +19,21 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN pnpm --filter dashboard build
 
 # ---- runtime ----------------------------------------------------------------
+# With pnpm workspaces, Next.js places server.js inside standalone/packages/dashboard/.
+# Copy static assets alongside the server so it can resolve them at runtime.
 FROM node:22-alpine AS runtime
-WORKDIR /app
+WORKDIR /app/packages/dashboard
 
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
     PORT=3000 \
     HOSTNAME=0.0.0.0
 
-# Next.js standalone output is self-contained
-COPY --from=builder /app/packages/dashboard/.next/standalone/ ./
-# Static assets and public dir must be added alongside the standalone server
-COPY --from=builder /app/packages/dashboard/.next/static/ ./.next/static/
-COPY --from=builder /app/packages/dashboard/public/ ./public/
+# The standalone directory is self-contained; copy it rooted at /app
+COPY --from=builder /app/packages/dashboard/.next/standalone/ /app/
+# Static assets and public must sit next to server.js (inside the workspace subdir)
+COPY --from=builder /app/packages/dashboard/.next/static/ .next/static/
+COPY --from=builder /app/packages/dashboard/public/ public/
 
 EXPOSE 3000
 

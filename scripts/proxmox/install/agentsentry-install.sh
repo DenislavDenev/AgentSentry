@@ -115,6 +115,12 @@ msg_ok "Dashboard dependencies installed"
 
 msg_info "Building dashboard (Next.js standalone)"
 NEXT_TELEMETRY_DISABLED=1 silence pnpm build
+
+# With pnpm workspaces, Next.js places server.js inside standalone/packages/dashboard/.
+# Copy static assets alongside it so the server can resolve them at runtime.
+STANDALONE="$INSTALL_DIR/packages/dashboard/.next/standalone/packages/dashboard"
+cp -r "$INSTALL_DIR/packages/dashboard/.next/static"  "$STANDALONE/.next/static"
+cp -r "$INSTALL_DIR/packages/dashboard/public"         "$STANDALONE/public"
 msg_ok "Dashboard built"
 
 # ---------------------------------------------------------------------------
@@ -196,7 +202,7 @@ After=network.target agentsentry-watchtower.service
 
 [Service]
 Type=simple
-WorkingDirectory=$INSTALL_DIR/packages/dashboard/.next/standalone
+WorkingDirectory=$INSTALL_DIR/packages/dashboard/.next/standalone/packages/dashboard
 Environment="NODE_ENV=production"
 Environment="NEXT_TELEMETRY_DISABLED=1"
 Environment="PORT=$DASHBOARD_PORT"

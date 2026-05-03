@@ -213,7 +213,7 @@ After=network.target agentsentry-watchtower.service
 
 [Service]
 Type=simple
-WorkingDirectory=$INSTALL_DIR/packages/dashboard/.next/standalone
+WorkingDirectory=$INSTALL_DIR/packages/dashboard/.next/standalone/packages/dashboard
 Environment="NODE_ENV=production"
 Environment="NEXT_TELEMETRY_DISABLED=1"
 Environment="PORT=$DASHBOARD_PORT"

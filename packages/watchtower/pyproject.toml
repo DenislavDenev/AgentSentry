@@ -19,6 +19,8 @@ watchtower = "watchtower.__main__:main"
 dev = [
     "ruff>=0.4",
     "pytest>=8.0",
+    "pytest-anyio>=0.0.0",
+    "anyio>=4.0",
     "httpx>=0.27",
 ]
 

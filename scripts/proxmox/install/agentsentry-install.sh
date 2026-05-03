@@ -119,8 +119,12 @@ NEXT_TELEMETRY_DISABLED=1 silence pnpm build
 # With pnpm workspaces, Next.js places server.js inside standalone/packages/dashboard/.
 # Copy static assets alongside it so the server can resolve them at runtime.
 STANDALONE="$INSTALL_DIR/packages/dashboard/.next/standalone/packages/dashboard"
+mkdir -p "$STANDALONE/.next" "$STANDALONE/public"
 cp -r "$INSTALL_DIR/packages/dashboard/.next/static"  "$STANDALONE/.next/static"
-cp -r "$INSTALL_DIR/packages/dashboard/public"         "$STANDALONE/public"
+# Copy public/ only if it contains files (may be empty in a fresh checkout)
+if [[ -d "$INSTALL_DIR/packages/dashboard/public" ]] && [[ -n "$(ls -A "$INSTALL_DIR/packages/dashboard/public" 2>/dev/null)" ]]; then
+  cp -r "$INSTALL_DIR/packages/dashboard/public/." "$STANDALONE/public/"
+fi
 msg_ok "Dashboard built"
 
 # ---------------------------------------------------------------------------

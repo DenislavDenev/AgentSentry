@@ -10,6 +10,8 @@ interface Props {
   inputTokens: number
   outputTokens: number
   cacheReadTokens: number
+  cacheCreate5mTokens: number
+  cacheCreate1hTokens: number
 }
 
 const STORAGE_KEY = "agentsentry:pricing-plan"
@@ -22,7 +24,13 @@ function readPlan(): PricingPlan {
   return "api"
 }
 
-export function CostCard({ inputTokens, outputTokens, cacheReadTokens }: Props) {
+export function CostCard({
+  inputTokens,
+  outputTokens,
+  cacheReadTokens,
+  cacheCreate5mTokens,
+  cacheCreate1hTokens,
+}: Props) {
   const [plan, setPlan] = useState<PricingPlan>("api")
 
   useEffect(() => {
@@ -33,7 +41,14 @@ export function CostCard({ inputTokens, outputTokens, cacheReadTokens }: Props) 
     return () => window.removeEventListener("storage", handler)
   }, [])
 
-  const cost = calcCostGeneric(inputTokens, outputTokens, cacheReadTokens, plan)
+  const cost = calcCostGeneric(
+    inputTokens,
+    outputTokens,
+    cacheReadTokens,
+    cacheCreate5mTokens,
+    cacheCreate1hTokens,
+    plan,
+  )
   const value = plan === "api" ? fmtCost(cost) : "N/A"
   const sub = plan === "api" ? "API rates · Sonnet avg" : "Subscription plan"
 

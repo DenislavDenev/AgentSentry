@@ -14,6 +14,7 @@ export interface SessionSummary {
 export interface MessageOut {
   uuid: string
   message_id: string | null
+  parent_uuid: string | null
   record_type: string
   model: string | null
   input_tokens: number
@@ -89,6 +90,9 @@ export interface PromptStat {
   project_slug: string
   prompt_text: string
   prompt_chars: number
-  input_tokens: number
+  input_tokens: number        // assistant response input tokens
+  output_tokens: number       // assistant response output tokens
+  cache_create_tokens: number // assistant cache creation tokens
+  billable_tokens: number     // total billable — primary sort key
   recorded_at: string
 }

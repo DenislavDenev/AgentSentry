@@ -12,6 +12,7 @@ router = APIRouter()
 async def list_sessions(
     limit: int = 50,
     offset: int = 0,
+    days: int = 0,
     conn: AsyncConnection = Depends(get_conn),
 ) -> list[SessionSummary]:
     rows = await conn.execute(
@@ -29,11 +30,12 @@ async def list_sessions(
                 COUNT(m.uuid)                          AS message_count
             FROM sessions s
             LEFT JOIN messages m ON m.session_id = s.id
+            WHERE :days = 0 OR s.started_at >= NOW() - (INTERVAL '1 day' * :days)
             GROUP BY s.id
             ORDER BY s.started_at DESC NULLS LAST
             LIMIT :limit OFFSET :offset
         """),
-        {"limit": limit, "offset": offset},
+        {"limit": limit, "offset": offset, "days": days},
     )
     return [SessionSummary(**dict(r._mapping)) for r in rows]
 
@@ -69,7 +71,7 @@ async def get_session(
 
     msgs = await conn.execute(
         text("""
-            SELECT uuid, message_id, record_type, model,
+            SELECT uuid, message_id, parent_uuid, record_type, model,
                    input_tokens, output_tokens, cache_read_tokens,
                    cache_create_5m_tokens, cache_create_1h_tokens,
                    prompt_text, prompt_chars, is_sidechain, agent_id, recorded_at

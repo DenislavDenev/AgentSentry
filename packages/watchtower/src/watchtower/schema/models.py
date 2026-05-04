@@ -13,6 +13,7 @@ class ToolCallIn(BaseModel):
 class RecordIn(BaseModel):
     uuid: str
     message_id: str | None = None
+    parent_uuid: str | None = None
     session_id: str
     project_slug: str
     record_type: str
@@ -51,6 +52,7 @@ class SessionSummary(BaseModel):
 class MessageOut(BaseModel):
     uuid: str
     message_id: str | None
+    parent_uuid: str | None = None
     record_type: str
     model: str | None
     input_tokens: int
@@ -126,5 +128,8 @@ class PromptStat(BaseModel):
     project_slug: str
     prompt_text: str
     prompt_chars: int
-    input_tokens: int
+    input_tokens: int  # assistant response input tokens (0 if no response yet)
+    output_tokens: int
+    cache_create_tokens: int
+    billable_tokens: int  # total billable cost of the triggered assistant response
     recorded_at: str

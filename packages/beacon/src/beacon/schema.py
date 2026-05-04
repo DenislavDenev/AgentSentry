@@ -18,6 +18,7 @@ class TelemetryRecord:
     record_type: str  # "assistant" | "user"
     timestamp: datetime
     message_id: str | None = None
+    parent_uuid: str | None = None
     model: str | None = None
     input_tokens: int = 0
     output_tokens: int = 0

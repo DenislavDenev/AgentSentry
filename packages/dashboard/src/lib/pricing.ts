@@ -47,6 +47,8 @@ export function calcCostGeneric(
   inputTokens: number,
   outputTokens: number,
   cacheReadTokens: number,
+  cacheCreate5mTokens: number,
+  cacheCreate1hTokens: number,
   plan: PricingPlan = "api",
 ): number {
   if (plan !== "api") return 0
@@ -54,7 +56,9 @@ export function calcCostGeneric(
   return (
     (inputTokens / 1_000_000) * r.input +
     (outputTokens / 1_000_000) * r.output +
-    (cacheReadTokens / 1_000_000) * r.cacheRead
+    (cacheReadTokens / 1_000_000) * r.cacheRead +
+    (cacheCreate5mTokens / 1_000_000) * r.cacheCreate5m +
+    (cacheCreate1hTokens / 1_000_000) * r.cacheCreate1h
   )
 }
 

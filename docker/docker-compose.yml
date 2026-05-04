@@ -71,7 +71,7 @@ services:
       dockerfile: packages/dashboard/Dockerfile
     restart: unless-stopped
     environment:
-      NEXT_PUBLIC_API_URL: http://watchtower:8000
+      WATCHTOWER_URL: http://watchtower:8000
       NEXT_TELEMETRY_DISABLED: "1"
     ports:
       - "3000:3000"

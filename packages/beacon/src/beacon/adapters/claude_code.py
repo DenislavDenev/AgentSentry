@@ -116,6 +116,7 @@ class ClaudeCodeAdapter(BaseAdapter):
             return None
 
         timestamp = _parse_timestamp(timestamp_raw)
+        parent_uuid = record.get("parentUuid")
         is_sidechain = bool(record.get("isSidechain"))
         agent_id = record.get("agentId")
 
@@ -129,6 +130,7 @@ class ClaudeCodeAdapter(BaseAdapter):
             return TelemetryRecord(
                 uuid=uuid,
                 message_id=message_id,
+                parent_uuid=parent_uuid,
                 session_id=session_id,
                 project_slug=project_slug,
                 record_type="assistant",
@@ -153,6 +155,7 @@ class ClaudeCodeAdapter(BaseAdapter):
                     return TelemetryRecord(
                         uuid=uuid,
                         message_id=None,
+                        parent_uuid=parent_uuid,
                         session_id=session_id,
                         project_slug=project_slug,
                         record_type="user",
@@ -168,6 +171,7 @@ class ClaudeCodeAdapter(BaseAdapter):
             return TelemetryRecord(
                 uuid=uuid,
                 message_id=None,
+                parent_uuid=parent_uuid,
                 session_id=session_id,
                 project_slug=project_slug,
                 record_type="user",

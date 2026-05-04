@@ -9,7 +9,10 @@ router = APIRouter()
 
 
 @router.get("/models", response_model=list[ModelStat])
-async def list_models(conn: AsyncConnection = Depends(get_conn)) -> list[ModelStat]:
+async def list_models(
+    days: int = 0,
+    conn: AsyncConnection = Depends(get_conn),
+) -> list[ModelStat]:
     rows = await conn.execute(
         text("""
             SELECT
@@ -23,8 +26,10 @@ async def list_models(conn: AsyncConnection = Depends(get_conn)) -> list[ModelSt
               AND model IS NOT NULL
               AND model != '<synthetic>'
               AND model NOT IN ('synthetic', 'unknown')
+              AND (:days = 0 OR recorded_at >= NOW() - (INTERVAL '1 day' * :days))
             GROUP BY model
             ORDER BY total_tokens DESC
-        """)
+        """),
+        {"days": days},
     )
     return [ModelStat(**dict(r._mapping)) for r in rows]

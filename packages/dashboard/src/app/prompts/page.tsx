@@ -15,8 +15,7 @@ export default function PromptsPage() {
   const [selected, setSelected] = useState<PromptStat | null>(null)
 
   useEffect(() => {
-    const base = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
-    fetch(`${base}/prompts?limit=50`, { cache: "no-store" })
+    fetch("/api/prompts?limit=50", { cache: "no-store" })
       .then((r) => r.json())
       .then((data: PromptStat[]) => setPrompts(data))
       .catch(() => setPrompts([]))
@@ -25,7 +24,7 @@ export default function PromptsPage() {
 
   const sorted = [...prompts].sort((a, b) =>
     sort === "tokens"
-      ? b.input_tokens - a.input_tokens
+      ? b.billable_tokens - a.billable_tokens
       : new Date(b.recorded_at).getTime() - new Date(a.recorded_at).getTime(),
   )
 
@@ -33,7 +32,9 @@ export default function PromptsPage() {
     <div className="space-y-4">
       <div>
         <h1 className="text-xl font-semibold">Prompts</h1>
-        <p className="text-sm text-gray-500">Largest user prompts ranked by token cost.</p>
+        <p className="text-sm text-gray-500">
+          Largest prompts ranked by the assistant response they triggered.
+        </p>
       </div>
 
       <div className="flex items-center gap-2">
@@ -69,7 +70,7 @@ export default function PromptsPage() {
                   <span className="truncate max-w-xs">{p.project_slug}</span>
                   <span>{fmtDate(p.recorded_at)}</span>
                   <span className="ml-auto tabular-nums text-indigo-400">
-                    {fmtTokens(p.input_tokens)} tokens
+                    {fmtTokens(p.billable_tokens)} billable
                   </span>
                   <span className="tabular-nums">{p.prompt_chars} chars</span>
                 </div>

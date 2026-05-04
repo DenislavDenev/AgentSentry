@@ -9,7 +9,10 @@ router = APIRouter()
 
 
 @router.get("/stats/overview", response_model=OverviewStats)
-async def overview(conn: AsyncConnection = Depends(get_conn)) -> OverviewStats:
+async def overview(
+    days: int = 0,
+    conn: AsyncConnection = Depends(get_conn),
+) -> OverviewStats:
     row = await conn.execute(
         text("""
             SELECT
@@ -22,7 +25,9 @@ async def overview(conn: AsyncConnection = Depends(get_conn)) -> OverviewStats:
                 COALESCE(SUM(cache_create_1h_tokens), 0)               AS cache_create_1h_tokens,
                 COALESCE(SUM(input_tokens + output_tokens), 0)         AS total_tokens
             FROM messages
-        """)
+            WHERE :days = 0 OR recorded_at >= NOW() - (INTERVAL '1 day' * :days)
+        """),
+        {"days": days},
     )
     r = row.fetchone()
     data = dict(r._mapping)
@@ -51,7 +56,7 @@ async def daily(
                 COALESCE(SUM(input_tokens + output_tokens), 0)              AS total_tokens,
                 COUNT(DISTINCT session_id)                                  AS session_count
             FROM messages
-            WHERE recorded_at >= NOW() - (INTERVAL '1 day' * :days)
+            WHERE :days = 0 OR recorded_at >= NOW() - (INTERVAL '1 day' * :days)
             GROUP BY DATE(recorded_at)
             ORDER BY DATE(recorded_at)
         """),

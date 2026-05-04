@@ -25,15 +25,16 @@ async function get<T>(path: string): Promise<T> {
 }
 
 export const api = {
-  overview: () => get<OverviewStats>("/stats/overview"),
+  overview: (days = 0) => get<OverviewStats>(`/stats/overview?days=${days}`),
   daily: (days = 30) => get<DailyStats[]>(`/stats/daily?days=${days}`),
-  sessions: (limit = 50, offset = 0) =>
-    get<SessionSummary[]>(`/sessions?limit=${limit}&offset=${offset}`),
+  sessions: (limit = 50, offset = 0, days = 0) =>
+    get<SessionSummary[]>(`/sessions?limit=${limit}&offset=${offset}&days=${days}`),
   session: (id: string) => get<SessionDetail>(`/sessions/${id}`),
-  projects: () => get<ProjectSummary[]>("/projects"),
+  projects: (days = 0) => get<ProjectSummary[]>(`/projects?days=${days}`),
   project: (slug: string) =>
     get<ProjectDetail>(`/projects/${encodeURIComponent(slug)}`),
-  models: () => get<ModelStat[]>("/models"),
-  tools: () => get<ToolStat[]>("/tools"),
-  prompts: (limit = 50) => get<PromptStat[]>(`/prompts?limit=${limit}`),
+  models: (days = 0) => get<ModelStat[]>(`/models?days=${days}`),
+  tools: (days = 0) => get<ToolStat[]>(`/tools?days=${days}`),
+  prompts: (limit = 50, days = 0) =>
+    get<PromptStat[]>(`/prompts?limit=${limit}&days=${days}`),
 }

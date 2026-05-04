@@ -9,7 +9,10 @@ router = APIRouter()
 
 
 @router.get("/projects", response_model=list[ProjectSummary])
-async def list_projects(conn: AsyncConnection = Depends(get_conn)) -> list[ProjectSummary]:
+async def list_projects(
+    days: int = 0,
+    conn: AsyncConnection = Depends(get_conn),
+) -> list[ProjectSummary]:
     rows = await conn.execute(
         text("""
             SELECT
@@ -20,9 +23,11 @@ async def list_projects(conn: AsyncConnection = Depends(get_conn)) -> list[Proje
                 COALESCE(SUM(m.cache_read_tokens), 0)      AS cache_read_tokens,
                 COALESCE(SUM(m.input_tokens + m.output_tokens), 0) AS total_tokens
             FROM messages m
+            WHERE :days = 0 OR m.recorded_at >= NOW() - (INTERVAL '1 day' * :days)
             GROUP BY m.project_slug
             ORDER BY total_tokens DESC
-        """)
+        """),
+        {"days": days},
     )
     return [ProjectSummary(**dict(r._mapping)) for r in rows]
 
@@ -55,6 +60,9 @@ async def get_project(slug: str, conn: AsyncConnection = Depends(get_conn)) -> P
                 COALESCE(SUM(input_tokens), 0)             AS input_tokens,
                 COALESCE(SUM(output_tokens), 0)            AS output_tokens,
                 COALESCE(SUM(cache_read_tokens), 0)        AS cache_read_tokens,
+                COALESCE(
+                    SUM(cache_create_5m_tokens + cache_create_1h_tokens), 0
+                )                                          AS cache_create_tokens,
                 COALESCE(SUM(input_tokens + output_tokens), 0) AS total_tokens,
                 COUNT(DISTINCT session_id)                 AS session_count
             FROM messages

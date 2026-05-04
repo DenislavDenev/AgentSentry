@@ -1,266 +1,318 @@
 # AgentSentry
 
-Self-hosted observability for local AI coding agents. AgentSentry collects Claude Code session logs from your workstation, parses them in real time, and presents a dashboard showing token usage, tool activity, cache efficiency, and cost — all without sending a single byte to any external service.
+AgentSentry is a small self-hosted dashboard for understanding AI coding agent token usage.
 
----
+It is built for people who run tools like Claude Code on a personal computer, but want an always-on usage dashboard in their homelab. It works in the same spirit as token-dashboard and Observatory: local data, browser-based visibility, and practical insight into what is driving token spend.
 
-## Who this is for
+AgentSentry reads a mounted agent log directory, stores analytics locally, and shows where tokens are going across prompts, sessions, projects, tools, and models.
 
-- Homelabbers running AI coding agents on one machine and hosting services on another
-- Power users of Claude Code who want visibility into token spend across projects and sessions
-- Anyone who wants a live view of their AI agent activity without SaaS telemetry
+## Contents
 
----
+- [Why Use It](#why-use-it)
+- [What You Get](#what-you-get)
+- [How It Works](#how-it-works)
+- [Install With Docker](#install-with-docker)
+- [Install On Bare Metal](#install-on-bare-metal)
+- [Install In Proxmox LXC](#install-in-proxmox-lxc)
+- [Configuration](#configuration)
+- [Privacy](#privacy)
+- [Troubleshooting](#troubleshooting)
+- [Future Agent Support](#future-agent-support)
 
-## Architecture
+## Why Use It
 
+AgentSentry is for people who want more than a total token count.
+
+Use it when you want to know:
+
+- Which prompts are expensive
+- Which projects use the most context
+- Which tools return huge outputs
+- Which files are being read again and again
+- Whether prompt caching is helping
+- Which models are driving cost
+- What habits could reduce token usage
+
+The goal is simple: make token waste visible.
+
+## What You Get
+
+- Live browser dashboard
+- Claude Code token usage tracking
+- Prompt and session history
+- Project-level usage
+- Model usage and API-equivalent cost estimates
+- Tool call summaries
+- Large output and repeated file-read detection
+- Cache efficiency trends
+- Token reduction tips
+- Local SQLite storage
+- Docker, bare metal, and Proxmox LXC installation paths
+
+## How It Works
+
+AgentSentry runs on your homelab server, VM, container, or LXC.
+
+Your personal computer shares its agent log directory read-only. AgentSentry reads that mounted directory and serves a local dashboard.
+
+```text
+Personal computer
+  ~/.claude/projects
+
+Homelab server
+  /data/agent-logs/projects
+
+AgentSentry
+  reads logs
+  stores analytics locally
+  serves the dashboard
 ```
-  Your workstation                    Homelab server (or same machine)
-  +-----------------+                 +----------------------------------+
-  |  Claude Code    |                 |  AgentSentry                     |
-  |                 |  mount (NFS /   |                                  |
-  |  ~/.claude/     |  CIFS / LXC     |  AgentScout -----> Watchtower   |
-  |    projects/    | ------------->  |  (watcher)  HTTP   (FastAPI)     |
-  |    *.jsonl      |                 |                       |           |
-  +-----------------+                 |                   PostgreSQL 16  |
-                                      |                       |           |
-                                      |                   Dashboard       |
-                                      |                   (Next.js 15)   |
-                                      +----------------------------------+
+
+For Claude Code, mount the `.claude` directory itself, not only the `projects` folder.
+
+AgentSentry does not modify your agent logs.
+
+## Install With Docker
+
+Docker is the easiest way to run AgentSentry.
+
+### 1. Mount Your Agent Logs
+
+Mount your personal computer's `.claude` directory on the Docker host.
+
+Example:
+
+```text
+/mnt/agent-logs/.claude
 ```
 
-| Component | Role | Stack |
-|---|---|---|
-| **AgentScout** | Watches the mounted agent log directory, reads new JSONL deltas, POSTs to Watchtower | Python, watchdog |
-| **The Beacon** | Pure Python library embedded in AgentScout; parses raw JSONL and deduplicates streaming snapshots | Python |
-| **Watchtower** | Receives records, persists them, serves the REST API | FastAPI, asyncpg, PostgreSQL 16 |
-| **Dashboard** | 7-view frontend covering overview, sessions, projects, tools, prompts, tips, settings | Next.js 15, Tailwind v4, echarts |
-
----
-
-## Installation — Docker (fastest path)
-
-**Requirements:** Docker 24+, Docker Compose v2
+Check that it contains session logs:
 
 ```bash
-git clone https://github.com/DenislavDenev/AgentSentry.git
-cd AgentSentry
-cp .env.example docker/.env
+ls /mnt/agent-logs/.claude/projects
 ```
 
-Edit `docker/.env` and set a strong `POSTGRES_PASSWORD`. Then open `docker/docker-compose.yml` and uncomment the agent-scout volume mount, pointing it at your agent log directory:
+### 2. Create `docker-compose.yml`
+
+Use the published image when available:
 
 ```yaml
-# In the agent-scout service volumes block:
+services:
+  agentsentry:
+    image: ghcr.io/denislavdenev/agentsentry:latest
+    container_name: agentsentry
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - /mnt/agent-logs/.claude:/data/agent-logs:ro
+      - agentsentry_data:/var/lib/agentsentry
+    environment:
+      AGENTSENTRY_DATA_DIR: /data/agent-logs
+      AGENTSENTRY_DB: /var/lib/agentsentry/agentsentry.db
+      AGENTSENTRY_SCAN_INTERVAL: 2
+
 volumes:
-  - /path/to/.claude:/data/agent-logs:ro   # <-- your workstation .claude dir
-  - scout_state:/var/lib/agentsentry/scout
+  agentsentry_data:
 ```
 
-If the logs live on a different machine, mount the NFS/CIFS share on the Docker host first, then use the local mount point as the source path.
+If you are building from source instead, replace the `image` line with:
+
+```yaml
+    build: .
+```
+
+### 3. Start AgentSentry
 
 ```bash
-cd docker
 docker compose up -d
 ```
 
-Dashboard: `http://localhost:3000` | API: `http://localhost:8000`
+Open:
 
----
+```text
+http://SERVER-IP:8080
+```
 
-## Installation — Bare Metal
+## Install On Bare Metal
 
-**Requirements:** Ubuntu 24.04 LTS or Debian 12
+Use this method for a small Linux server or VM.
+
+Recommended systems:
+
+- Debian 12
+- Ubuntu 24.04 LTS
+
+### 1. Mount Your Agent Logs
+
+Mount the personal computer's `.claude` directory to:
+
+```text
+/data/agent-logs
+```
+
+Check:
+
+```bash
+ls /data/agent-logs/projects
+```
+
+### 2. Install AgentSentry
 
 ```bash
 git clone https://github.com/DenislavDenev/AgentSentry.git
 cd AgentSentry
-
-export AGENT_DATA_DIR=/mnt/agent-logs   # path where .claude dir is mounted
-export DB_PASS=your-strong-password
-
-sudo -E bash scripts/install.sh
+sudo AGENTSENTRY_DATA_DIR=/data/agent-logs ./scripts/install.sh
 ```
 
-The script installs Python 3.12, Node.js 22, PostgreSQL 16, uv, and pnpm; clones the repo to `/opt/agentsentry`; runs Alembic migrations; and registers three systemd units:
+The installer creates a single `agentsentry` service.
 
-| Unit | Check status |
-|---|---|
-| `agentsentry-watchtower` | `systemctl status agentsentry-watchtower` |
-| `agentsentry-scout` | `systemctl status agentsentry-scout` |
-| `agentsentry-dashboard` | `systemctl status agentsentry-dashboard` |
+### 3. Open The Dashboard
 
----
+```text
+http://SERVER-IP:8080
+```
 
-## Installation — Proxmox LXC
+### 4. Check The Service
 
-This is the recommended path for homelabbers. Claude Code runs on your workstation; AgentSentry runs in a lightweight LXC on Proxmox VE 8.x.
-
-### 1. Create the LXC
-
-Use the Proxmox UI or `pct` to create an Ubuntu 24.04 or Debian 12 LXC (unprivileged is supported). Recommended sizing: 2 vCPUs, 2 GB RAM, 20 GB disk.
-
-### 2. Expose the agent log directory to the LXC
-
-The `.claude` directory lives on your workstation. Pick one of these options:
-
-**Option A — NFS (workstation exports the share):**
 ```bash
-# On your workstation, add to /etc/exports:
-/home/you/.claude  192.168.1.0/24(ro,sync,no_subtree_check)
-exportfs -ra
-
-# On the Proxmox host:
-mkdir -p /mnt/agent-logs
-mount -t nfs 192.168.1.x:/home/you/.claude /mnt/agent-logs
+systemctl status agentsentry
 ```
 
-**Option B — CIFS/SMB:**
+## Install In Proxmox LXC
+
+This is the recommended homelab setup.
+
+Suggested starting size:
+
+```text
+1 vCPU
+512 MB RAM
+8 GB disk
+Debian 12 or Ubuntu 24.04
+```
+
+### 1. Mount Logs On The Proxmox Host
+
+Example:
+
+```text
+/mnt/agent-logs/.claude
+```
+
+Check:
+
 ```bash
-# On the Proxmox host:
-mount -t cifs //192.168.1.x/claude-share /mnt/agent-logs \
-  -o ro,credentials=/etc/cifs-credentials
+ls /mnt/agent-logs/.claude/projects
 ```
 
-**Option C — Bind-mount (workstation IS the Proxmox host):**
+### 2. Bind Mount Into The LXC
 
-No network mount needed. Skip straight to step 3, using your local `.claude` path.
+Edit the container config on the Proxmox host:
 
-### 3. Add the bind-mount to the LXC config
-
-Add this line to `/etc/pve/lxc/<CTID>.conf` on the Proxmox host:
-
-```
-mp0: /mnt/agent-logs,mp=/data/agent-logs,ro=1
+```bash
+nano /etc/pve/lxc/CTID.conf
 ```
 
-For Option C, use the local path directly:
-```
-mp0: /home/you/.claude,mp=/data/agent-logs,ro=1
+Add:
+
+```text
+mp0: /mnt/agent-logs/.claude,mp=/data/agent-logs,ro=1
 ```
 
-Restart the LXC: `pct stop <CTID> && pct start <CTID>`
+Restart the container:
 
-### 4. Run the installer inside the LXC
+```bash
+pct restart CTID
+```
+
+Inside the LXC, check:
+
+```bash
+ls /data/agent-logs/projects
+```
+
+### 3. Install AgentSentry
 
 ```bash
 git clone https://github.com/DenislavDenev/AgentSentry.git
 cd AgentSentry
-
-export AGENT_DATA_DIR=/data/agent-logs
-export DB_PASS=your-strong-password
-
-sudo -E bash scripts/install-lxc.sh
+sudo AGENTSENTRY_DATA_DIR=/data/agent-logs ./scripts/install-lxc.sh
 ```
 
-The installer validates the mount before doing anything and aborts with a clear message if it is missing or unreadable.
+Open:
 
-Dashboard: `http://<LXC-IP>:3000` | API: `http://<LXC-IP>:8000`
-
----
-
-## Configuring the agent data mount
-
-AgentScout expects this directory layout under `AGENT_DATA_DIR`:
-
-```
-AGENT_DATA_DIR/
-  projects/
-    <project-slug>/
-      <session-uuid>.jsonl
-      ...
+```text
+http://LXC-IP:8080
 ```
 
-This matches exactly what Claude Code writes to `~/.claude/`. Set `AGENT_DATA_DIR` to wherever that directory is accessible on the server.
+## Configuration
 
-AgentScout opens all `.jsonl` files in read-only mode and never writes to this path.
+Most installs only need `AGENTSENTRY_DATA_DIR`.
 
----
+| Variable | Default | Purpose |
+|---|---:|---|
+| `AGENTSENTRY_HOST` | `0.0.0.0` | Listen address |
+| `AGENTSENTRY_PORT` | `8080` | Dashboard port |
+| `AGENTSENTRY_DATA_DIR` | `/data/agent-logs` | Mounted agent log directory |
+| `AGENTSENTRY_DB` | `/var/lib/agentsentry/agentsentry.db` | Local database path |
+| `AGENTSENTRY_SCAN_INTERVAL` | `2` | Scan interval in seconds |
 
-## Updating
+## Privacy
 
-**Bare metal / LXC:**
-```bash
-cd /opt/agentsentry
-sudo -E bash scripts/update.sh
-```
+AgentSentry is local-first.
 
-`update.sh` runs: `git pull` → `uv sync` → `pnpm build` → `alembic upgrade head` → `systemctl restart`
+It does not upload prompts, send telemetry, require an account, or modify your agent logs.
 
-**Docker:**
-```bash
-cd AgentSentry/docker
-docker compose pull
-docker compose up -d --build
-```
-
----
+The dashboard may show prompts, file paths, project names, and tool output summaries. If you expose it beyond a trusted LAN, put it behind authentication.
 
 ## Troubleshooting
 
-**Dashboard shows "No data" after install**
+### No Data
 
-Verify AgentScout can see the mount and is running:
+Check the mounted logs:
+
 ```bash
-systemctl status agentsentry-scout
-journalctl -u agentsentry-scout -n 50
-ls $AGENT_DATA_DIR/projects/
+ls /data/agent-logs/projects
 ```
 
-**AgentScout is running but nothing appears in Watchtower**
+Check the app:
 
-Check the API directly:
 ```bash
-curl http://localhost:8000/stats/overview
-```
-If Watchtower is unreachable, check `systemctl status agentsentry-watchtower` and whether PostgreSQL is up (`systemctl status postgresql`).
-
-**Port conflict on 3000 or 8000**
-
-Override before running the installer:
-```bash
-export DASHBOARD_PORT=3001
-export WATCHTOWER_PORT=8080
-sudo -E bash scripts/install.sh
-```
-For Docker, change the `ports:` mappings in `docker-compose.yml`.
-
-**Database migration fails**
-
-Check PostgreSQL is running and the credentials match:
-```bash
-sudo -u postgres psql -c "\du"
-systemctl status postgresql
+curl http://localhost:8080/api/health
 ```
 
-**LXC bind-mount not accessible inside the container**
+### Docker
 
-Check the mount exists on the Proxmox host first, then verify it propagated into the LXC:
 ```bash
-# On Proxmox host:
-ls /mnt/agent-logs/projects/
-
-# Inside LXC:
-ls /data/agent-logs/projects/
+docker logs agentsentry
 ```
-If the host path exists but the LXC path is empty, verify the `mp0:` line in `/etc/pve/lxc/<CTID>.conf` and restart the container.
 
----
+### Bare Metal Or LXC
 
-## Metrics captured
+```bash
+systemctl status agentsentry
+journalctl -u agentsentry -n 100
+```
 
-| Field | Source in Claude Code JSONL |
-|---|---|
-| Input tokens | `message.usage.input_tokens` |
-| Output tokens | `message.usage.output_tokens` |
-| Cache read tokens | `message.usage.cache_read_input_tokens` |
-| Cache create (5 min) | `message.usage.cache_creation.ephemeral_5m_input_tokens` |
-| Cache create (1 hr) | `message.usage.cache_creation.ephemeral_1h_input_tokens` |
-| Model | `message.model` |
-| Tool name + target | `content[].type == "tool_use"` — name + primary input field |
-| Tool result size (est.) | `content[].type == "tool_result"` — character count / 4 |
-| Tool errors | `content[].is_error` |
-| User prompt text | `message.content` string or text content blocks |
-| Session start / end | First and last message timestamp per session |
-| Project slug | Derived from the JSONL file path (`projects/<slug>/`) |
-| Sidechain flag | `isSidechain` — identifies sub-agent turns |
+### Port Already In Use
+
+Set another port and restart AgentSentry:
+
+```bash
+AGENTSENTRY_PORT=8090
+```
+
+## Future Agent Support
+
+AgentSentry starts as a Claude Code usage dashboard, but the design is meant to support more AI coding agents over time.
+
+Future sources can include Codex, Cursor, Aider, OpenCode, or other tools that expose local session data.
+
+Model pricing should stay local and editable, so new models can be added without changing the whole app.
+
+## Project Goal
+
+AgentSentry should stay small enough to run quietly in a homelab and useful enough to change how people work.
+
+It exists to make AI coding usage understandable: what happened, what it cost, and what you can do to waste fewer tokens next time.

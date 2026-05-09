@@ -28,15 +28,23 @@ async def ingest(body: IngestRequest, conn: AsyncConnection = Depends(get_conn))
         for rec in body.records:
             ts = _epoch(rec.timestamp)
 
-            # Upsert session (min/max timestamps). SQLite supports min()/max()
-            # as scalar functions when given multiple args.
+            # Upsert session (min/max timestamps). SQLite's scalar MIN/MAX
+            # return NULL if any arg is NULL — Postgres's LEAST/GREATEST
+            # ignored NULLs. The IFNULL pair makes us NULL-safe: if the
+            # stored bound is NULL, fall back to EXCLUDED, and vice versa.
             await conn.execute(
                 text("""
                     INSERT INTO sessions (id, project_slug, started_at, ended_at)
                     VALUES (:id, :slug, :ts, :ts)
                     ON CONFLICT (id) DO UPDATE SET
-                        started_at = MIN(sessions.started_at, EXCLUDED.started_at),
-                        ended_at   = MAX(sessions.ended_at, EXCLUDED.ended_at)
+                        started_at = MIN(
+                            IFNULL(sessions.started_at, EXCLUDED.started_at),
+                            IFNULL(EXCLUDED.started_at, sessions.started_at)
+                        ),
+                        ended_at   = MAX(
+                            IFNULL(sessions.ended_at, EXCLUDED.ended_at),
+                            IFNULL(EXCLUDED.ended_at, sessions.ended_at)
+                        )
                 """),
                 {"id": rec.session_id, "slug": rec.project_slug, "ts": ts},
             )

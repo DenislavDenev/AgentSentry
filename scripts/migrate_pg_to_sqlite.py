@@ -21,8 +21,8 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-import psycopg
-from sqlalchemy import create_engine, text
+# psycopg is only needed at runtime — import lazily inside main() so the
+# tests can import _b/_s/_epoch without pulling in a Postgres driver.
 
 
 def _epoch(dt: datetime | None) -> int | None:
@@ -47,7 +47,39 @@ def _s(v):
     return v
 
 
+def _b(v) -> int:
+    """Strict normaliser for psycopg boolean values.
+
+    Postgres BOOLEAN through psycopg is normally Python bool, but binary mode
+    or non-default adapters can deliver ints, strings, or bytes. A naive
+    `1 if v else 0` is wrong for `b'\\x00'`, `b'f'`, and `'f'` — all three
+    are Python-truthy and would migrate as 1. Raises on shapes we haven't
+    seen so unknown adapter behaviour fails loudly instead of silently
+    inflating sidechain/error flags.
+    """
+    if v is None:
+        return 0
+    if isinstance(v, bool):
+        return 1 if v else 0
+    if isinstance(v, int):
+        return 1 if v != 0 else 0
+    if isinstance(v, (bytes, str)):
+        s = v.decode("utf-8", errors="replace") if isinstance(v, bytes) else v
+        s = s.strip().lower()
+        if s in ("t", "true", "1", "y", "yes"):
+            return 1
+        if s in ("f", "false", "0", "n", "no", ""):
+            return 0
+        # Single byte: handle b'\x00' / b'\x01' shapes.
+        if isinstance(v, bytes) and len(v) == 1:
+            return 1 if v != b"\x00" else 0
+    raise ValueError(f"Cannot normalise boolean value {v!r} ({type(v).__name__})")
+
+
 def main() -> int:
+    import psycopg
+    from sqlalchemy import create_engine, text
+
     pg_url = os.environ.get("PG_URL")
     sqlite_path = os.environ.get("SQLITE_PATH")
     if not pg_url or not sqlite_path:
@@ -137,7 +169,7 @@ def main() -> int:
                     "cc1": row["cache_create_1h_tokens"],
                     "ptxt": _s(row["prompt_text"]),
                     "pchars": row["prompt_chars"],
-                    "sc": 1 if row["is_sidechain"] else 0,
+                    "sc": _b(row["is_sidechain"]),
                     "aid": _s(row["agent_id"]),
                     "ra": _epoch(row["recorded_at"]),
                 },
@@ -167,7 +199,7 @@ def main() -> int:
                     "name": _s(row["tool_name"]),
                     "tgt": _s(row["target"]),
                     "rt": row["result_tokens"],
-                    "err": 1 if row["is_error"] else 0,
+                    "err": _b(row["is_error"]),
                     "ra": _epoch(row["recorded_at"]),
                 },
             )

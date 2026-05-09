@@ -161,3 +161,77 @@ async def test_prompt_attribution_via_parent_uuid(client):
     assert p["uuid"] == "user-1"
     assert p["billable_tokens"] == 1700  # 1000 + 500 + 200
     assert p["recorded_at"] == "2025-06-01T10:00:00Z"  # ISO format
+
+
+@pytest.mark.asyncio
+async def test_session_upsert_null_safe(client, engine):
+    """Reproduce the SQLite scalar MIN/MAX NULL trap.
+
+    A session row with started_at=NULL must not propagate the NULL when a new
+    record arrives — the IFNULL pair in the upsert should heal it.
+    """
+    from sqlalchemy import text
+
+    # Pre-seed a session with a NULL bound (simulates a partial migration).
+    async with engine.begin() as conn:
+        await conn.execute(
+            text("INSERT INTO sessions (id, project_slug, started_at, ended_at) "
+                 "VALUES ('null-sess', 'proj-a', NULL, NULL)")
+        )
+
+    # Now ingest a record into that session.
+    await client.post(
+        "/ingest",
+        json={
+            "records": [
+                {**_BASE,
+                 "uuid": "n1", "message_id": "nm1",
+                 "session_id": "null-sess",
+                 "timestamp": "2025-06-01T10:00:00Z"},
+            ]
+        },
+    )
+
+    resp = await client.get("/sessions/null-sess")
+    assert resp.status_code == 200
+    d = resp.json()
+    # Both bounds should now be the ingested timestamp, not NULL.
+    assert d["started_at"] is not None
+    assert d["ended_at"] is not None
+    assert d["duration_secs"] == 0
+
+
+def test_migrate_pg_to_sqlite_bool_normalizer():
+    """Strict boolean normaliser must reject ambiguous psycopg shapes."""
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
+    try:
+        from migrate_pg_to_sqlite import _b
+    finally:
+        sys.path.pop(0)
+
+    assert _b(True) == 1
+    assert _b(False) == 0
+    assert _b(None) == 0
+    assert _b(1) == 1
+    assert _b(0) == 0
+    assert _b("t") == 1
+    assert _b("f") == 0
+    assert _b("true") == 1
+    assert _b("FALSE") == 0
+    assert _b(b"t") == 1
+    assert _b(b"f") == 0
+    assert _b(b"\x00") == 0
+    assert _b(b"\x01") == 1
+
+    # Unknown shapes must raise — the bug we're guarding against was silent
+    # truth-coercion of weird bytes.
+    import pytest
+    with pytest.raises(ValueError):
+        _b("maybe")
+    with pytest.raises(ValueError):
+        _b(b"maybe")
+    with pytest.raises(ValueError):
+        _b(3.14)

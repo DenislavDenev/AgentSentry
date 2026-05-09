@@ -33,6 +33,20 @@ def _epoch(dt: datetime | None) -> int | None:
     return int(dt.timestamp())
 
 
+def _s(v):
+    """Decode psycopg's bytes outputs to str for SQLite TEXT columns.
+
+    Some psycopg adapter / connection configurations return TEXT columns as
+    bytes. SQLite would store those as BLOBs, breaking every text comparison
+    in the query layer. Force str everywhere.
+    """
+    if v is None:
+        return None
+    if isinstance(v, bytes):
+        return v.decode("utf-8", errors="replace")
+    return v
+
+
 def main() -> int:
     pg_url = os.environ.get("PG_URL")
     sqlite_path = os.environ.get("SQLITE_PATH")
@@ -76,8 +90,8 @@ def main() -> int:
                     VALUES (:id, :slug, :sa, :ea)
                 """),
                 {
-                    "id": row["id"],
-                    "slug": row["project_slug"],
+                    "id": _s(row["id"]),
+                    "slug": _s(row["project_slug"]),
                     "sa": _epoch(row["started_at"]),
                     "ea": _epoch(row["ended_at"]),
                 },
@@ -109,22 +123,22 @@ def main() -> int:
                     )
                 """),
                 {
-                    "uuid": row["uuid"],
-                    "mid": row["message_id"],
-                    "puuid": row["parent_uuid"],
-                    "sid": row["session_id"],
-                    "slug": row["project_slug"],
-                    "rtype": row["record_type"],
-                    "model": row["model"],
+                    "uuid": _s(row["uuid"]),
+                    "mid": _s(row["message_id"]),
+                    "puuid": _s(row["parent_uuid"]),
+                    "sid": _s(row["session_id"]),
+                    "slug": _s(row["project_slug"]),
+                    "rtype": _s(row["record_type"]),
+                    "model": _s(row["model"]),
                     "it": row["input_tokens"],
                     "ot": row["output_tokens"],
                     "crt": row["cache_read_tokens"],
                     "cc5": row["cache_create_5m_tokens"],
                     "cc1": row["cache_create_1h_tokens"],
-                    "ptxt": row["prompt_text"],
+                    "ptxt": _s(row["prompt_text"]),
                     "pchars": row["prompt_chars"],
                     "sc": 1 if row["is_sidechain"] else 0,
-                    "aid": row["agent_id"],
+                    "aid": _s(row["agent_id"]),
                     "ra": _epoch(row["recorded_at"]),
                 },
             )
@@ -148,10 +162,10 @@ def main() -> int:
                         (:mu, :sid, :name, :tgt, :rt, :err, :ra)
                 """),
                 {
-                    "mu": row["message_uuid"],
-                    "sid": row["session_id"],
-                    "name": row["tool_name"],
-                    "tgt": row["target"],
+                    "mu": _s(row["message_uuid"]),
+                    "sid": _s(row["session_id"]),
+                    "name": _s(row["tool_name"]),
+                    "tgt": _s(row["target"]),
                     "rt": row["result_tokens"],
                     "err": 1 if row["is_error"] else 0,
                     "ra": _epoch(row["recorded_at"]),

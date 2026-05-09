@@ -18,6 +18,8 @@ async def list_prompts(
     # Rank by billable_tokens (assistant input + output + cache creation) so the most
     # expensive prompts appear first. User-row input_tokens are always 0 and useless for
     # ranking. Falls back to prompt_chars when no assistant response is linked yet.
+    #
+    # recorded_at is INTEGER epoch — emit as ISO-8601 Z for the API contract.
     rows = await conn.execute(
         text("""
             SELECT
@@ -26,7 +28,7 @@ async def list_prompts(
                 u.project_slug,
                 u.prompt_text,
                 u.prompt_chars,
-                u.recorded_at::TEXT                                        AS recorded_at,
+                strftime('%Y-%m-%dT%H:%M:%SZ', u.recorded_at, 'unixepoch') AS recorded_at,
                 COALESCE(a.input_tokens, 0)                                AS input_tokens,
                 COALESCE(a.output_tokens, 0)                               AS output_tokens,
                 COALESCE(
@@ -43,7 +45,7 @@ async def list_prompts(
                   AND a.record_type  = 'assistant'
             WHERE u.record_type   = 'user'
               AND u.prompt_text   IS NOT NULL
-              AND (:days = 0 OR u.recorded_at >= NOW() - (INTERVAL '1 day' * :days))
+              AND (:days = 0 OR u.recorded_at >= (strftime('%s','now') - :days * 86400))
             ORDER BY billable_tokens DESC, u.prompt_chars DESC
             LIMIT :limit
         """),

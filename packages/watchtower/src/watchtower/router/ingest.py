@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection
@@ -8,36 +10,46 @@ from watchtower.schema.models import IngestRequest
 router = APIRouter()
 
 
+def _epoch(dt: datetime) -> int:
+    """Convert a datetime to integer Unix-epoch seconds (UTC).
+
+    Naïve datetimes are treated as UTC — Beacon adapters always parse Claude
+    Code timestamps with explicit Zulu suffix, so this is consistent with what
+    the parser emits. Future adapters MUST emit timezone-aware datetimes.
+    """
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return int(dt.timestamp())
+
+
 @router.post("/ingest", status_code=201)
 async def ingest(body: IngestRequest, conn: AsyncConnection = Depends(get_conn)) -> dict:
     async with conn.begin():
         for rec in body.records:
-            # Upsert session (min/max timestamps)
+            ts = _epoch(rec.timestamp)
+
+            # Upsert session (min/max timestamps). SQLite supports min()/max()
+            # as scalar functions when given multiple args.
             await conn.execute(
                 text("""
                     INSERT INTO sessions (id, project_slug, started_at, ended_at)
                     VALUES (:id, :slug, :ts, :ts)
                     ON CONFLICT (id) DO UPDATE SET
-                        started_at = LEAST(sessions.started_at, EXCLUDED.started_at),
-                        ended_at   = GREATEST(sessions.ended_at, EXCLUDED.ended_at)
+                        started_at = MIN(sessions.started_at, EXCLUDED.started_at),
+                        ended_at   = MAX(sessions.ended_at, EXCLUDED.ended_at)
                 """),
-                {"id": rec.session_id, "slug": rec.project_slug, "ts": rec.timestamp},
+                {"id": rec.session_id, "slug": rec.project_slug, "ts": ts},
             )
 
-            # Skip records without message_id that would violate the unique constraint.
-            # user records (tool results, prompts) have no message_id — insert normally.
+            # Skip records without message_id that would violate the unique
+            # constraint. user records (tool results, prompts) have no
+            # message_id — insert normally.
             if rec.message_id is not None:
-                # Serialize concurrent ingests for the same logical message to prevent
-                # the race where two streaming snapshots both pass the DELETE check and
-                # then conflict on UNIQUE(session_id, message_id). The lock is
-                # transaction-scoped and released automatically at commit/rollback.
-                await conn.execute(
-                    text("SELECT pg_advisory_xact_lock(hashtext(:key))"),
-                    {"key": f"{rec.session_id}|{rec.message_id}"},
-                )
-                # Remove any stale row that has the same (session_id, message_id) but a
-                # different uuid — this handles streaming snapshots that arrived in a
-                # previous batch and were stored under an older uuid.
+                # Remove any stale row with the same (session_id, message_id)
+                # but a different uuid — handles streaming snapshots that
+                # arrived in a previous batch under an older uuid. SQLite
+                # serialises writers via the file lock, so the Postgres
+                # advisory-lock dance is not needed here.
                 await conn.execute(
                     text("""
                         DELETE FROM messages
@@ -47,9 +59,9 @@ async def ingest(body: IngestRequest, conn: AsyncConnection = Depends(get_conn))
                     """),
                     {"sid": rec.session_id, "mid": rec.message_id, "uuid": rec.uuid},
                 )
-                # Upsert on uuid (PK). If this exact record was already ingested (same
-                # uuid) we just refresh the token fields in case a later snapshot of the
-                # same message was re-delivered with the same uuid.
+                # Upsert on uuid (PK). If this exact record was already
+                # ingested (same uuid) we refresh the token fields in case a
+                # later snapshot of the same message was re-delivered.
                 result = await conn.execute(
                     text("""
                         INSERT INTO messages (
@@ -75,15 +87,15 @@ async def ingest(body: IngestRequest, conn: AsyncConnection = Depends(get_conn))
                             recorded_at            = EXCLUDED.recorded_at
                         RETURNING uuid
                     """),
-                    _msg_params(rec),
+                    _msg_params(rec, ts),
                 )
                 row = result.fetchone()
                 if row is None:
                     continue
                 msg_uuid = row[0]
-                # Remove stale tool_calls before re-inserting — the pre-DELETE above
-                # handles the different-uuid case via ON DELETE CASCADE, but when the
-                # uuid already existed (DO UPDATE path) the old rows survive.
+                # Remove stale tool_calls before re-inserting — the pre-DELETE
+                # above handles the different-uuid case via ON DELETE CASCADE,
+                # but the DO UPDATE path leaves the old rows alive.
                 if rec.tool_calls:
                     await conn.execute(
                         text("DELETE FROM tool_calls WHERE message_uuid = :uuid"),
@@ -107,11 +119,11 @@ async def ingest(body: IngestRequest, conn: AsyncConnection = Depends(get_conn))
                         ON CONFLICT (uuid) DO NOTHING
                         RETURNING uuid
                     """),
-                    _msg_params(rec),
+                    _msg_params(rec, ts),
                 )
                 row = result.fetchone()
-                # If the user record already existed (DO NOTHING fired), skip its
-                # tool_calls too — they were inserted on the original ingest.
+                # If the user record already existed (DO NOTHING fired), skip
+                # its tool_calls too — they were inserted on the original.
                 if row is None:
                     continue
                 msg_uuid = rec.uuid
@@ -131,15 +143,15 @@ async def ingest(body: IngestRequest, conn: AsyncConnection = Depends(get_conn))
                         "name": tc.name,
                         "target": tc.target,
                         "rtok": tc.result_tokens,
-                        "err": tc.is_error,
-                        "recorded_at": rec.timestamp,
+                        "err": 1 if tc.is_error else 0,
+                        "recorded_at": ts,
                     },
                 )
 
     return {"inserted": len(body.records)}
 
 
-def _msg_params(rec) -> dict:
+def _msg_params(rec, ts: int) -> dict:
     return {
         "uuid": rec.uuid,
         "mid": rec.message_id,
@@ -155,7 +167,7 @@ def _msg_params(rec) -> dict:
         "cc1_tok": rec.cache_create_1h_tokens,
         "ptxt": rec.prompt_text,
         "pchars": rec.prompt_chars,
-        "sidechain": rec.is_sidechain,
+        "sidechain": 1 if rec.is_sidechain else 0,
         "agent_id": rec.agent_id,
-        "recorded_at": rec.timestamp,
+        "recorded_at": ts,
     }

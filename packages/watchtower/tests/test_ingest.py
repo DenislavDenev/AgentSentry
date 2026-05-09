@@ -1,51 +1,6 @@
-"""
-Integration tests for POST /ingest.
-Requires WATCHTOWER_TEST_DB env var pointing at a real PostgreSQL instance,
-or will be skipped automatically.
-"""
-
-import os
+"""Integration tests for POST /ingest against a real SQLite database."""
 
 import pytest
-import pytest_asyncio
-from httpx import ASGITransport, AsyncClient
-from sqlalchemy import text
-from sqlalchemy.ext.asyncio import create_async_engine
-
-TEST_DB = os.environ.get("WATCHTOWER_TEST_DB")
-pytestmark = pytest.mark.skipif(not TEST_DB, reason="WATCHTOWER_TEST_DB not set")
-
-
-@pytest.fixture(scope="session")
-def anyio_backend():
-    return "asyncio"
-
-
-@pytest_asyncio.fixture(scope="session")
-async def engine():
-    e = create_async_engine(TEST_DB)
-    yield e
-    await e.dispose()
-
-
-@pytest_asyncio.fixture(autouse=True)
-async def clean_tables(engine):
-    async with engine.begin() as conn:
-        await conn.execute(text("TRUNCATE tool_calls, messages, sessions CASCADE"))
-    yield
-
-
-@pytest_asyncio.fixture(scope="session")
-async def client(engine):
-    import watchtower.db as db_module
-
-    db_module._engine = engine
-
-    from watchtower.__main__ import app
-
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-        yield c
-
 
 _SAMPLE_RECORD = {
     "uuid": "u1",
@@ -64,13 +19,13 @@ _SAMPLE_RECORD = {
 }
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_ingest_returns_201(client):
     resp = await client.post("/ingest", json={"records": [_SAMPLE_RECORD]})
     assert resp.status_code == 201
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_ingest_idempotent_on_message_id(client):
     rec2 = {**_SAMPLE_RECORD, "uuid": "u2", "input_tokens": 200}
     await client.post("/ingest", json={"records": [_SAMPLE_RECORD]})
@@ -84,7 +39,7 @@ async def test_ingest_idempotent_on_message_id(client):
     assert data["input_tokens"] == 200
 
 
-@pytest.mark.anyio
+@pytest.mark.asyncio
 async def test_tool_calls_stored(client):
     await client.post("/ingest", json={"records": [_SAMPLE_RECORD]})
     resp = await client.get("/tools")

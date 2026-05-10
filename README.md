@@ -130,7 +130,7 @@ sudo AGENT_DATA_DIR=/data/agent-logs ./scripts/install.sh
 ```
 
 The installer:
-- Installs Python 3.12 and Node.js 20 (build-time only)
+- Installs Python (distro package) and Node.js 20 (build-time only); uv provides the Python 3.12 runtime
 - Installs uv and pnpm
 - Builds the Vite dashboard
 - Creates a single `agentsentry-watchtower` systemd service
@@ -177,10 +177,16 @@ Edit the container config on the Proxmox host:
 nano /etc/pve/lxc/CTID.conf
 ```
 
-Add:
+Add (replace `<HOST_PATH>` with the full path to your `.claude` directory on the Proxmox host — the same value you would pass as `AGENT_DATA_HOST` to `agentsentry.sh`):
 
 ```text
-mp0: /mnt/agent-logs/.claude,mp=/data/agent-logs,ro=1
+mp0: <HOST_PATH>,mp=/data/agent-logs,ro=1
+```
+
+Example:
+
+```text
+mp0: /mnt/agent-logs,mp=/data/agent-logs,ro=1
 ```
 
 Restart:
@@ -216,7 +222,7 @@ All settings are environment variables passed to the `agentsentry-watchtower` se
 | `AGENT_DATA_DIR` | `/data/agent-logs` | Mounted agent log directory (Claude Code `.claude` folder) |
 | `DATABASE_URL` | `sqlite+aiosqlite:////var/lib/agentsentry/agentsentry.db` | SQLite database path |
 | `STATE_DIR` | `/var/lib/agentsentry/scout` | Scout state file directory |
-| `DASHBOARD_DIR` | *(none)* | Path to built Vite `dist/` folder |
+| `DASHBOARD_DIR` | *(auto-set by installer and Docker image)* | Path to built Vite `dist/` folder; set automatically, override only for custom builds |
 | `HOST` | `0.0.0.0` | Listen address |
 | `PORT` | `8000` | Listen port |
 

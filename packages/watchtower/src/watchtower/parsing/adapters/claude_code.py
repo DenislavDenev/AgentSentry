@@ -32,12 +32,22 @@ def is_codex_invocation(command: str) -> bool:
 
     Simple basename match — no shell tokenizer needed since the file name is
     distinctive enough that false positives are impossible in practice.
+
+    Both PurePosixPath and PureWindowsPath are checked so that Windows-style
+    backslash paths (e.g. from a Windows dev machine's JSONL) are detected
+    correctly when the server runs on Linux (where PurePath == PurePosixPath,
+    which treats backslashes as valid filename characters rather than separators).
     """
-    from pathlib import PurePath
+    from pathlib import PurePosixPath, PureWindowsPath
 
     for token in command.split():
         try:
-            if PurePath(token).name in _CODEX_LAUNCHERS:
+            if PurePosixPath(token).name in _CODEX_LAUNCHERS:
+                return True
+        except Exception:
+            pass
+        try:
+            if PureWindowsPath(token).name in _CODEX_LAUNCHERS:
                 return True
         except Exception:
             pass

@@ -1,7 +1,5 @@
 [tool.uv.workspace]
 members = [
-    "packages/agent-scout",
-    "packages/beacon",
     "packages/watchtower",
 ]
 

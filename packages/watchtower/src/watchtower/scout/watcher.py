@@ -23,9 +23,9 @@ from pathlib import Path
 from watchdog.events import FileCreatedEvent, FileModifiedEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 
-from beacon.adapters.claude_code import ClaudeCodeAdapter
-from beacon.dedup import StreamingDeduplicator
-from beacon.schema import TelemetryRecord
+from watchtower.parsing.adapters.claude_code import ClaudeCodeAdapter
+from watchtower.parsing.dedup import StreamingDeduplicator
+from watchtower.parsing.schema import TelemetryRecord
 from watchtower.scout.state import StateStore
 
 logger = logging.getLogger(__name__)

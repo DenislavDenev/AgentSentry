@@ -1,20 +1,21 @@
 #!/usr/bin/env bash
 # AgentSentry — Bare-Metal Installer
 # Tested on: Ubuntu 24.04 LTS, Debian 12
+#
+# One service. One SQLite file. No Postgres. No Node runtime in production.
+#
+# Usage:
+#   sudo AGENT_DATA_DIR=/path/to/.claude ./scripts/install.sh
 set -euo pipefail
 
 # ---------------------------------------------------------------------------
-# CONFIGURATION — override via env vars or edit here
+# CONFIGURATION — override via env vars
 # ---------------------------------------------------------------------------
-AGENT_DATA_DIR="${AGENT_DATA_DIR:-/opt/agent-data}"
+AGENT_DATA_DIR="${AGENT_DATA_DIR:-/data/agent-logs}"
 INSTALL_DIR="${INSTALL_DIR:-/opt/agentsentry}"
 STATE_DIR="${STATE_DIR:-/var/lib/agentsentry/scout}"
-DB_NAME="${DB_NAME:-agentsentry}"
-DB_USER="${DB_USER:-agentsentry}"
-DB_PASS="${DB_PASS:-changeme}"
+PORT="${PORT:-8000}"
 REPO="${REPO:-https://github.com/DenislavDenev/AgentSentry.git}"
-WATCHTOWER_PORT="${WATCHTOWER_PORT:-8000}"
-DASHBOARD_PORT="${DASHBOARD_PORT:-3000}"
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -27,16 +28,13 @@ require_root() {
 }
 
 detect_os() {
-  if [[ -f /etc/os-release ]]; then
-    # shellcheck source=/dev/null
-    . /etc/os-release
-    case "$ID" in
-      ubuntu|debian) return 0 ;;
-      *) error "Unsupported distro: $ID. Supported: Ubuntu 24.04, Debian 12." ;;
-    esac
-  else
-    error "Cannot detect OS — /etc/os-release not found."
-  fi
+  [[ -f /etc/os-release ]] || error "Cannot detect OS — /etc/os-release not found."
+  # shellcheck source=/dev/null
+  . /etc/os-release
+  case "$ID" in
+    ubuntu|debian) ;;
+    *) error "Unsupported distro: $ID. Supported: Ubuntu 24.04, Debian 12." ;;
+  esac
 }
 
 # ---------------------------------------------------------------------------
@@ -46,28 +44,15 @@ install_system_deps() {
   info "Installing system dependencies..."
   apt-get update -qq
 
-  # PostgreSQL 16
-  if ! command -v psql &>/dev/null; then
-    info "Adding PostgreSQL 16 apt repository..."
-    apt-get install -y --no-install-recommends curl ca-certificates gnupg lsb-release
-    curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
-      | gpg --dearmor -o /usr/share/keyrings/postgresql.gpg
-    echo "deb [signed-by=/usr/share/keyrings/postgresql.gpg] \
-      https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
-      > /etc/apt/sources.list.d/pgdg.list
-    apt-get update -qq
-  fi
-
-  # Node.js 22 via NodeSource
-  if ! command -v node &>/dev/null || [[ "$(node --version | cut -d. -f1)" != "v22" ]]; then
-    info "Adding Node.js 22 repository..."
-    curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+  # Node.js 20 LTS — build-time only, not needed at runtime
+  if ! command -v node &>/dev/null || [[ "$(node --version | cut -d. -f1)" != "v20" ]]; then
+    info "Adding Node.js 20 repository..."
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
   fi
 
   apt-get install -y --no-install-recommends \
     python3.12 python3.12-venv python3-pip \
     nodejs \
-    postgresql-16 postgresql-client-16 \
     git curl ca-certificates
 
   info "System dependencies installed."
@@ -77,26 +62,24 @@ install_system_deps() {
 # STEP 2 — uv
 # ---------------------------------------------------------------------------
 install_uv() {
-  if ! command -v uv &>/dev/null; then
+  if ! command -v uv &>/dev/null && [[ ! -x "$HOME/.local/bin/uv" ]]; then
     info "Installing uv..."
     curl -LsSf https://astral.sh/uv/install.sh | sh
-    export PATH="$HOME/.local/bin:$PATH"
-  else
-    info "uv already installed: $(uv --version)"
   fi
+  export PATH="$HOME/.local/bin:$PATH"
+  info "uv $(uv --version) ready"
 }
 
 # ---------------------------------------------------------------------------
-# STEP 3 — pnpm
+# STEP 3 — pnpm (pinned to 9)
 # ---------------------------------------------------------------------------
 install_pnpm() {
   if ! command -v pnpm &>/dev/null; then
-    info "Installing pnpm via corepack..."
+    info "Installing pnpm 9 via corepack..."
     corepack enable
-    corepack prepare pnpm@latest --activate
-  else
-    info "pnpm already installed: $(pnpm --version)"
+    corepack prepare pnpm@9 --activate
   fi
+  info "pnpm $(pnpm --version) ready"
 }
 
 # ---------------------------------------------------------------------------
@@ -113,113 +96,56 @@ install_repo() {
 }
 
 # ---------------------------------------------------------------------------
-# STEP 5 — Python workspace
+# STEP 5 — Python workspace (watchtower only)
 # ---------------------------------------------------------------------------
 install_python() {
-  info "Installing Python workspace dependencies..."
+  info "Installing Python dependencies..."
   cd "$INSTALL_DIR"
   uv sync --frozen --no-dev
+  info "Python workspace ready"
 }
 
 # ---------------------------------------------------------------------------
-# STEP 6 — Frontend
+# STEP 6 — Vite SPA build
 # ---------------------------------------------------------------------------
 install_frontend() {
-  info "Building Next.js dashboard..."
-  cd "$INSTALL_DIR/packages/dashboard"
+  info "Building Vite dashboard..."
+  cd "$INSTALL_DIR/packages/dashboard-vite"
   pnpm install --frozen-lockfile
-  NEXT_TELEMETRY_DISABLED=1 pnpm build
+  pnpm build
+  info "Dashboard built at $INSTALL_DIR/packages/dashboard-vite/dist"
 }
 
 # ---------------------------------------------------------------------------
-# STEP 7 — PostgreSQL setup
+# STEP 7 — Data directories and SQLite location
 # ---------------------------------------------------------------------------
-setup_postgres() {
-  info "Configuring PostgreSQL..."
-  systemctl enable --now postgresql
-
-  # Create role and database if they don't already exist
-  sudo -u postgres psql -tc "SELECT 1 FROM pg_roles WHERE rolname='$DB_USER'" \
-    | grep -q 1 || \
-    sudo -u postgres psql -c "CREATE USER $DB_USER WITH PASSWORD '$DB_PASS';"
-
-  sudo -u postgres psql -tc "SELECT 1 FROM pg_database WHERE datname='$DB_NAME'" \
-    | grep -q 1 || \
-    sudo -u postgres psql -c "CREATE DATABASE $DB_NAME OWNER $DB_USER;"
+create_dirs() {
+  mkdir -p "$STATE_DIR"
+  mkdir -p /var/lib/agentsentry
 }
 
 # ---------------------------------------------------------------------------
-# STEP 8 — Alembic migrations
+# STEP 8 — Systemd unit (single service)
 # ---------------------------------------------------------------------------
-run_migrations() {
-  info "Running database migrations..."
-  cd "$INSTALL_DIR/packages/watchtower"
-  DATABASE_URL="postgresql+asyncpg://$DB_USER:$DB_PASS@localhost:5432/$DB_NAME" \
-    uv run --no-sync alembic upgrade head
-}
+write_systemd_unit() {
+  info "Writing systemd service unit..."
 
-# ---------------------------------------------------------------------------
-# STEP 9 — Systemd units
-# ---------------------------------------------------------------------------
-write_systemd_units() {
-  info "Writing systemd service units..."
+  UV_BIN="$(command -v uv 2>/dev/null || echo "$HOME/.local/bin/uv")"
 
-  # Watchtower
   cat > /etc/systemd/system/agentsentry-watchtower.service <<EOF
 [Unit]
-Description=AgentSentry Watchtower API
-After=network.target postgresql.service
-Requires=postgresql.service
+Description=AgentSentry Watchtower
+After=network.target
 
 [Service]
 Type=simple
 WorkingDirectory=$INSTALL_DIR
-Environment="DATABASE_URL=postgresql+asyncpg://$DB_USER:$DB_PASS@localhost:5432/$DB_NAME"
-ExecStart=$HOME/.local/bin/uv run --no-sync --package watchtower watchtower
-Restart=on-failure
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-  # AgentScout
-  mkdir -p "$STATE_DIR"
-  cat > /etc/systemd/system/agentsentry-scout.service <<EOF
-[Unit]
-Description=AgentSentry AgentScout Collector
-After=network.target agentsentry-watchtower.service
-Requires=agentsentry-watchtower.service
-
-[Service]
-Type=simple
-WorkingDirectory=$INSTALL_DIR
+Environment="DATABASE_URL=sqlite+aiosqlite:////var/lib/agentsentry/agentsentry.db"
 Environment="AGENT_DATA_DIR=$AGENT_DATA_DIR"
 Environment="STATE_DIR=$STATE_DIR"
-Environment="WATCHTOWER_URL=http://localhost:$WATCHTOWER_PORT"
-ExecStart=$HOME/.local/bin/uv run --no-sync --package agent-scout agent-scout
-Restart=on-failure
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-  # Dashboard
-  cat > /etc/systemd/system/agentsentry-dashboard.service <<EOF
-[Unit]
-Description=AgentSentry Dashboard
-After=network.target agentsentry-watchtower.service
-
-[Service]
-Type=simple
-WorkingDirectory=$INSTALL_DIR/packages/dashboard/.next/standalone/packages/dashboard
-Environment="NODE_ENV=production"
-Environment="NEXT_TELEMETRY_DISABLED=1"
-Environment="PORT=$DASHBOARD_PORT"
-Environment="HOSTNAME=0.0.0.0"
-Environment="NEXT_PUBLIC_API_URL=http://localhost:$WATCHTOWER_PORT"
-ExecStart=/usr/bin/node server.js
+Environment="DASHBOARD_DIR=$INSTALL_DIR/packages/dashboard-vite/dist"
+Environment="PORT=$PORT"
+ExecStart=$UV_BIN run --no-sync --project packages/watchtower watchtower
 Restart=on-failure
 RestartSec=5
 
@@ -228,10 +154,29 @@ WantedBy=multi-user.target
 EOF
 
   systemctl daemon-reload
-  systemctl enable agentsentry-watchtower agentsentry-scout agentsentry-dashboard
-  systemctl start  agentsentry-watchtower agentsentry-scout agentsentry-dashboard
+  systemctl enable agentsentry-watchtower
+  systemctl restart agentsentry-watchtower
 
-  info "Services started. Check status with: systemctl status agentsentry-*"
+  info "Service started."
+}
+
+# ---------------------------------------------------------------------------
+# STEP 9 — Smoke test
+# ---------------------------------------------------------------------------
+smoke_test() {
+  info "Running smoke test (waiting 4 s for startup)..."
+  sleep 4
+  local html_code json_code
+  html_code=$(curl -sf -o /dev/null -w "%{http_code}" "http://localhost:$PORT/" || echo "000")
+  json_code=$(curl -sf -o /dev/null -w "%{http_code}" "http://localhost:$PORT/api/stats/overview" || echo "000")
+
+  if [[ "$html_code" != "200" ]]; then
+    error "Smoke test FAILED: GET / returned $html_code. Check: journalctl -u agentsentry-watchtower -n 50"
+  fi
+  if [[ "$json_code" != "200" ]]; then
+    error "Smoke test FAILED: GET /api/stats/overview returned $json_code"
+  fi
+  info "Smoke test passed."
 }
 
 # ---------------------------------------------------------------------------
@@ -244,7 +189,7 @@ main() {
   info "=== AgentSentry Bare-Metal Installer ==="
   info "Install dir : $INSTALL_DIR"
   info "Agent data  : $AGENT_DATA_DIR"
-  info "Database    : $DB_NAME @ localhost"
+  info "Port        : $PORT"
 
   install_system_deps
   install_uv
@@ -252,17 +197,15 @@ main() {
   install_repo
   install_python
   install_frontend
-  setup_postgres
-  run_migrations
-  write_systemd_units
+  create_dirs
+  write_systemd_unit
+  smoke_test
 
   echo ""
   info "=== Installation complete ==="
-  info "Dashboard : http://localhost:$DASHBOARD_PORT"
-  info "API       : http://localhost:$WATCHTOWER_PORT"
-  info ""
-  info "Mount your agent log directory at $AGENT_DATA_DIR, then:"
-  info "  systemctl restart agentsentry-scout"
+  info "Dashboard : http://$(hostname -I | awk '{print $1}'):$PORT"
+  echo ""
+  info "Logs : journalctl -u agentsentry-watchtower -f"
 }
 
 main "$@"

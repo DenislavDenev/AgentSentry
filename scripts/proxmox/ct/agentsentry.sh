@@ -29,7 +29,7 @@ msg_ok()    { echo -e " ${CM} ${GN}$*${CL}"; }
 msg_error() { echo -e " ${CROSS} ${RD}$*${CL}"; exit 1; }
 
 header_info() {
-  clear
+  clear 2>/dev/null || true   # safe in non-interactive SSH sessions
   cat <<'EOF'
 
     _                    _   ____            _

@@ -87,7 +87,7 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - /mnt/agent-logs/.claude:/data/agent-logs:ro
+      - /mnt/agent-logs:/data/agent-logs:ro
       - agentsentry_data:/var/lib/agentsentry
     environment:
       AGENT_DATA_DIR: /data/agent-logs

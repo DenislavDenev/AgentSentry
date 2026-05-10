@@ -6,7 +6,10 @@ from contextlib import asynccontextmanager, contextmanager
 from pathlib import Path
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from watchtower.config import config
 from watchtower.db import shutdown, startup
@@ -130,13 +133,39 @@ async def lifespan(_app: FastAPI):
 
 app = FastAPI(title="Watchtower", version="0.1.0", lifespan=lifespan)
 
-app.include_router(ingest.router)
-app.include_router(sessions.router)
-app.include_router(projects.router)
-app.include_router(stats.router)
-app.include_router(models.router)
-app.include_router(tools.router)
-app.include_router(prompts.router)
+# All JSON endpoints live under /api so the Vite SPA can fetch /api/* and
+# FastAPI routes don't collide with the SPA's client-side paths.
+app.include_router(ingest.router, prefix="/api")
+app.include_router(sessions.router, prefix="/api")
+app.include_router(projects.router, prefix="/api")
+app.include_router(stats.router, prefix="/api")
+app.include_router(models.router, prefix="/api")
+app.include_router(tools.router, prefix="/api")
+app.include_router(prompts.router, prefix="/api")
+
+
+@app.exception_handler(StarletteHTTPException)
+async def spa_fallback(request: Request, exc: StarletteHTTPException):
+    """Serve index.html for 404s on non-API paths (SPA client-side routing).
+
+    For /api/* paths (or non-404 errors) the standard JSON error body is returned.
+    StaticFiles raises 404 for every path the SPA owns (/sessions/:id, etc.);
+    this handler intercepts those and returns index.html so React Router takes over.
+    Note: cannot re-raise inside a Starlette exception handler — must return a response.
+    """
+    if exc.status_code == 404 and not request.url.path.startswith("/api"):
+        if config.dashboard_dir is not None:
+            index = config.dashboard_dir / "index.html"
+            if index.exists():
+                return FileResponse(index)
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+
+
+# Mount static files last so /api/* routes shadow correctly.
+# check_dir=False: on CT 111 the dir is built by the install script; on dev
+# workstations dashboard_dir is None so the mount is skipped entirely.
+if config.dashboard_dir is not None and config.dashboard_dir.exists():
+    app.mount("/", StaticFiles(directory=str(config.dashboard_dir), html=False), name="spa")
 
 
 def main() -> None:

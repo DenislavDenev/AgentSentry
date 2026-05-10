@@ -14,14 +14,14 @@ _BASE = {
 
 @pytest.mark.asyncio
 async def test_sessions_list_empty(client):
-    resp = await client.get("/sessions")
+    resp = await client.get("/api/sessions")
     assert resp.status_code == 200
     assert resp.json() == []
 
 
 @pytest.mark.asyncio
 async def test_overview_zeros_on_empty_db(client):
-    resp = await client.get("/stats/overview")
+    resp = await client.get("/api/stats/overview")
     assert resp.status_code == 200
     d = resp.json()
     assert d["total_sessions"] == 0
@@ -31,7 +31,7 @@ async def test_overview_zeros_on_empty_db(client):
 @pytest.mark.asyncio
 async def test_projects_after_ingest(client):
     await client.post(
-        "/ingest",
+        "/api/ingest",
         json={
             "records": [
                 {
@@ -51,7 +51,7 @@ async def test_projects_after_ingest(client):
             ]
         },
     )
-    resp = await client.get("/projects")
+    resp = await client.get("/api/projects")
     assert resp.status_code == 200
     projects = resp.json()
     assert len(projects) == 1
@@ -61,14 +61,14 @@ async def test_projects_after_ingest(client):
 
 @pytest.mark.asyncio
 async def test_project_404(client):
-    resp = await client.get("/projects/does-not-exist")
+    resp = await client.get("/api/projects/does-not-exist")
     assert resp.status_code == 404
 
 
 @pytest.mark.asyncio
 async def test_models_endpoint(client):
     await client.post(
-        "/ingest",
+        "/api/ingest",
         json={
             "records": [
                 {
@@ -81,7 +81,7 @@ async def test_models_endpoint(client):
             ]
         },
     )
-    resp = await client.get("/models")
+    resp = await client.get("/api/models")
     assert resp.status_code == 200
 
 
@@ -89,7 +89,7 @@ async def test_models_endpoint(client):
 async def test_daily_endpoint_groups_by_date(client):
     """Verify the date(col, 'unixepoch') GROUP BY emits 'YYYY-MM-DD' keys."""
     await client.post(
-        "/ingest",
+        "/api/ingest",
         json={
             "records": [
                 {**_BASE, "uuid": "d1", "message_id": "dm1", "timestamp": "2025-06-01T01:00:00Z",
@@ -101,7 +101,7 @@ async def test_daily_endpoint_groups_by_date(client):
             ]
         },
     )
-    resp = await client.get("/stats/daily?days=0")
+    resp = await client.get("/api/stats/daily?days=0")
     assert resp.status_code == 200
     rows = {r["date"]: r for r in resp.json()}
     assert rows["2025-06-01"]["input_tokens"] == 300
@@ -112,7 +112,7 @@ async def test_daily_endpoint_groups_by_date(client):
 async def test_session_duration_computed_from_epoch(client):
     """Session started_at/ended_at are integer epoch; duration is direct subtraction."""
     await client.post(
-        "/ingest",
+        "/api/ingest",
         json={
             "records": [
                 {**_BASE, "uuid": "x1", "message_id": "xm1",
@@ -122,7 +122,7 @@ async def test_session_duration_computed_from_epoch(client):
             ]
         },
     )
-    resp = await client.get("/sessions/s1")
+    resp = await client.get("/api/sessions/s1")
     assert resp.status_code == 200
     d = resp.json()
     assert d["duration_secs"] == 300
@@ -132,7 +132,7 @@ async def test_session_duration_computed_from_epoch(client):
 async def test_prompt_attribution_via_parent_uuid(client):
     """User prompts rank by the assistant response that has parent_uuid = prompt.uuid."""
     await client.post(
-        "/ingest",
+        "/api/ingest",
         json={
             "records": [
                 # User prompt
@@ -153,7 +153,7 @@ async def test_prompt_attribution_via_parent_uuid(client):
             ]
         },
     )
-    resp = await client.get("/prompts?limit=5")
+    resp = await client.get("/api/prompts?limit=5")
     assert resp.status_code == 200
     prompts = resp.json()
     assert len(prompts) == 1
@@ -181,7 +181,7 @@ async def test_session_upsert_null_safe(client, engine):
 
     # Now ingest a record into that session.
     await client.post(
-        "/ingest",
+        "/api/ingest",
         json={
             "records": [
                 {**_BASE,
@@ -192,7 +192,7 @@ async def test_session_upsert_null_safe(client, engine):
         },
     )
 
-    resp = await client.get("/sessions/null-sess")
+    resp = await client.get("/api/sessions/null-sess")
     assert resp.status_code == 200
     d = resp.json()
     # Both bounds should now be the ingested timestamp, not NULL.

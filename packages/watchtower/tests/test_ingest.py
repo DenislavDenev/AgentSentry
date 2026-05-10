@@ -1,4 +1,4 @@
-"""Integration tests for POST /ingest against a real SQLite database."""
+"""Integration tests for POST /api/ingest against a real SQLite database."""
 
 import pytest
 
@@ -21,17 +21,17 @@ _SAMPLE_RECORD = {
 
 @pytest.mark.asyncio
 async def test_ingest_returns_201(client):
-    resp = await client.post("/ingest", json={"records": [_SAMPLE_RECORD]})
+    resp = await client.post("/api/ingest", json={"records": [_SAMPLE_RECORD]})
     assert resp.status_code == 201
 
 
 @pytest.mark.asyncio
 async def test_ingest_idempotent_on_message_id(client):
     rec2 = {**_SAMPLE_RECORD, "uuid": "u2", "input_tokens": 200}
-    await client.post("/ingest", json={"records": [_SAMPLE_RECORD]})
-    await client.post("/ingest", json={"records": [rec2]})
+    await client.post("/api/ingest", json={"records": [_SAMPLE_RECORD]})
+    await client.post("/api/ingest", json={"records": [rec2]})
 
-    resp = await client.get("/sessions/sess-1")
+    resp = await client.get("/api/sessions/sess-1")
     assert resp.status_code == 200
     data = resp.json()
     # Dedup: only one message row, with the latest token count
@@ -41,8 +41,8 @@ async def test_ingest_idempotent_on_message_id(client):
 
 @pytest.mark.asyncio
 async def test_tool_calls_stored(client):
-    await client.post("/ingest", json={"records": [_SAMPLE_RECORD]})
-    resp = await client.get("/tools")
+    await client.post("/api/ingest", json={"records": [_SAMPLE_RECORD]})
+    resp = await client.get("/api/tools")
     assert resp.status_code == 200
     tools = {t["tool_name"]: t for t in resp.json()}
     assert "Read" in tools

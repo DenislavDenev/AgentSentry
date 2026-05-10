@@ -1,0 +1,10 @@
+@import "tailwindcss";
+
+/* Privacy blur — toggled via Cmd/Ctrl+B */
+.blur-sensitive .sensitive {
+  filter: blur(6px);
+  transition: filter 0.15s ease;
+}
+.blur-sensitive .sensitive:hover {
+  filter: none;
+}

@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 import sys
@@ -89,13 +90,41 @@ def _run_migrations() -> None:
         command.upgrade(cfg, "head")
 
 
+async def _start_scout():
+    """Start the in-process JSONL watcher if AGENT_DATA_DIR is configured.
+
+    Returns the Scout instance (caller must call stop() on shutdown), or None
+    if the scout is disabled or the data directory does not exist.
+    """
+    from watchtower.scout.state import StateStore
+    from watchtower.scout.watcher import Scout
+
+    agent_data_dir = config.agent_data_dir
+    if agent_data_dir is None:
+        logger.info("Scout disabled — set AGENT_DATA_DIR to enable")
+        return None
+    if not agent_data_dir.exists():
+        logger.warning("Scout: AGENT_DATA_DIR does not exist: %s (skipping)", agent_data_dir)
+        return None
+
+    loop = asyncio.get_event_loop()
+    state = StateStore(config.state_dir)
+    scout = Scout(agent_data_dir, state, loop)
+    await scout.initial_scan_async()
+    scout.start()
+    return scout
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     _run_migrations()
     await startup()
+    scout = await _start_scout()
     try:
         yield
     finally:
+        if scout is not None:
+            scout.stop()
         await shutdown()
 
 

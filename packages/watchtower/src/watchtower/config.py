@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from pydantic_settings import BaseSettings
 
 
@@ -7,6 +9,11 @@ class Config(BaseSettings):
     host: str = "0.0.0.0"
     port: int = 8000
     log_level: str = "INFO"
+
+    # Scout (in-process JSONL watcher) settings.
+    # Set AGENT_DATA_DIR to enable; scout is skipped if the path does not exist.
+    agent_data_dir: Path | None = None
+    state_dir: Path = Path("/var/lib/agentsentry/scout")
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 

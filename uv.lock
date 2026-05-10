@@ -847,10 +847,12 @@ source = { editable = "packages/watchtower" }
 dependencies = [
     { name = "aiosqlite" },
     { name = "alembic" },
+    { name = "beacon" },
     { name = "fastapi" },
     { name = "pydantic-settings" },
     { name = "sqlalchemy", extra = ["asyncio"] },
     { name = "uvicorn", extra = ["standard"] },
+    { name = "watchdog" },
 ]
 
 [package.dev-dependencies]
@@ -866,10 +868,12 @@ dev = [
 requires-dist = [
     { name = "aiosqlite", specifier = ">=0.20" },
     { name = "alembic", specifier = ">=1.13" },
+    { name = "beacon", editable = "packages/beacon" },
     { name = "fastapi", specifier = ">=0.111" },
     { name = "pydantic-settings", specifier = ">=2.0" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30" },
+    { name = "watchdog", specifier = ">=4.0" },
 ]
 
 [package.metadata.requires-dev]

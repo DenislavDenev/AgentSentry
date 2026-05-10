@@ -23,7 +23,10 @@ services:
       DATABASE_URL: sqlite+aiosqlite:////var/lib/agentsentry/agentsentry.db
       AGENT_DATA_DIR: /data/agent-logs
       STATE_DIR: /var/lib/agentsentry/scout
-      DASHBOARD_DIR: /app/dashboard-static
+      # DASHBOARD_DIR is baked into the image at /app/dashboard-static;
+      # the ENV in the Dockerfile sets this automatically for image-based runs.
+      # Override here only if mounting a custom SPA build.
+      # DASHBOARD_DIR: /app/dashboard-static
     ports:
       - "8000:8000"
     volumes:

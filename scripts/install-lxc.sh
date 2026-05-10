@@ -87,8 +87,11 @@ install_system_deps() {
     curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
   fi
 
+  # python3/python3-venv are distro-agnostic (Debian 12 ships 3.11, Ubuntu
+  # 24.04 ships 3.12). uv manages the actual Python 3.12 runtime itself via
+  # its bundled CPython distribution — no version-pinned apt package needed.
   apt-get install -y --no-install-recommends \
-    python3.12 python3.12-venv python3-pip \
+    python3 python3-venv \
     nodejs \
     git curl ca-certificates
 
@@ -201,19 +204,25 @@ EOF
 # STEP 10 — Smoke test
 # ---------------------------------------------------------------------------
 smoke_test() {
-  info "Running smoke test (waiting 4 s for startup)..."
-  sleep 4
-  local html_code json_code
-  html_code=$(curl -sf -o /dev/null -w "%{http_code}" "http://localhost:$PORT/" || echo "000")
-  json_code=$(curl -sf -o /dev/null -w "%{http_code}" "http://localhost:$PORT/api/stats/overview" || echo "000")
+  info "Waiting for service to become ready (up to 30 s)..."
+  local deadline=$((SECONDS + 30)) code
+  until [[ $SECONDS -ge $deadline ]]; do
+    code=$(curl -sf -o /dev/null -w "%{http_code}" "http://localhost:$PORT/api/stats/overview" 2>/dev/null || echo "000")
+    if [[ "$code" == "200" ]]; then break; fi
+    sleep 3
+  done
 
+  if [[ "$code" != "200" ]]; then
+    error "Smoke test FAILED after 30 s: /api/stats/overview returned $code. Check: journalctl -u agentsentry-watchtower -n 50"
+  fi
+
+  local html_code
+  html_code=$(curl -sf -o /dev/null -w "%{http_code}" "http://localhost:$PORT/" 2>/dev/null || echo "000")
   if [[ "$html_code" != "200" ]]; then
-    error "Smoke test FAILED: GET / returned $html_code. Check: journalctl -u agentsentry-watchtower -n 50"
+    error "Smoke test FAILED: GET / returned $html_code (dashboard not served)"
   fi
-  if [[ "$json_code" != "200" ]]; then
-    error "Smoke test FAILED: GET /api/stats/overview returned $json_code"
-  fi
-  info "Smoke test passed."
+
+  info "Smoke test passed (/ -> $html_code, /api/stats/overview -> $code)"
 }
 
 # ---------------------------------------------------------------------------

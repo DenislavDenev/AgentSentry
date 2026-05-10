@@ -50,9 +50,12 @@ msg_info "Adding Node.js 20 repository"
 curl -fsSL https://deb.nodesource.com/setup_20.x | silence bash -
 msg_ok "Node.js repository added"
 
-msg_info "Installing Python 3.12 and Node.js 20"
+msg_info "Installing Python and Node.js 20"
+# python3/python3-venv are distro-agnostic (Debian 12 ships 3.11, Ubuntu 24.04
+# ships 3.12). uv manages the actual Python 3.12 runtime via its bundled
+# CPython — no version-pinned apt package needed.
 silence apt-get install -y --no-install-recommends \
-  python3.12 python3.12-venv python3-pip \
+  python3 python3-venv \
   nodejs \
   git
 msg_ok "System packages installed"
@@ -144,18 +147,24 @@ msg_ok "Service enabled and started"
 # ---------------------------------------------------------------------------
 # STEP 9 — Smoke test
 # ---------------------------------------------------------------------------
-msg_info "Running smoke test"
-sleep 4
-HTML_CODE=$(curl -sf -o /dev/null -w "%{http_code}" "http://localhost:$PORT/" || echo "000")
-JSON_CODE=$(curl -sf -o /dev/null -w "%{http_code}" "http://localhost:$PORT/api/stats/overview" || echo "000")
+msg_info "Waiting for service to become ready (up to 30 s)"
+DEADLINE=$((SECONDS + 30))
+JSON_CODE="000"
+until [[ $SECONDS -ge $DEADLINE ]]; do
+  JSON_CODE=$(curl -sf -o /dev/null -w "%{http_code}" "http://localhost:$PORT/api/stats/overview" 2>/dev/null || echo "000")
+  if [[ "$JSON_CODE" == "200" ]]; then break; fi
+  sleep 3
+done
 
-if [[ "$HTML_CODE" != "200" ]]; then
-  msg_error "Smoke test FAILED: GET / returned $HTML_CODE. Check: journalctl -u agentsentry-watchtower -n 50"
-fi
 if [[ "$JSON_CODE" != "200" ]]; then
-  msg_error "Smoke test FAILED: GET /api/stats/overview returned $JSON_CODE"
+  msg_error "Smoke test FAILED after 30 s: /api/stats/overview returned $JSON_CODE. Check: journalctl -u agentsentry-watchtower -n 50"
 fi
-msg_ok "Smoke test passed"
+
+HTML_CODE=$(curl -sf -o /dev/null -w "%{http_code}" "http://localhost:$PORT/" 2>/dev/null || echo "000")
+if [[ "$HTML_CODE" != "200" ]]; then
+  msg_error "Smoke test FAILED: GET / returned $HTML_CODE (dashboard not served)"
+fi
+msg_ok "Smoke test passed (/ -> $HTML_CODE, /api/stats/overview -> $JSON_CODE)"
 
 # ---------------------------------------------------------------------------
 # Done

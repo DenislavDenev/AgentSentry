@@ -91,12 +91,13 @@ services:
       - agentsentry_data:/var/lib/agentsentry
     environment:
       AGENT_DATA_DIR: /data/agent-logs
+      # DATABASE_URL and DASHBOARD_DIR are set to sensible defaults in the image.
 
 volumes:
   agentsentry_data:
 ```
 
-If building from source instead of using the published image:
+If building from source, the Dockerfile is a multi-stage build — Node builds the Vite SPA, Python carries the result. No separate build step needed:
 
 ```yaml
     build:

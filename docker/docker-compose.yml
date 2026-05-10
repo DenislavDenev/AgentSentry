@@ -2,41 +2,9 @@ name: agentsentry
 
 services:
   # -------------------------------------------------------------------------
-  # PostgreSQL 16 — persistent telemetry store
-  # -------------------------------------------------------------------------
-  postgres:
-    image: postgres:16-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: agentsentry
-      POSTGRES_USER: agentsentry
-      POSTGRES_PASSWORD: changeme   # Override via .env before production use
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U agentsentry"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # -------------------------------------------------------------------------
-  # Watchtower — FastAPI + PostgreSQL API (runs migrations on startup)
-  # -------------------------------------------------------------------------
-  watchtower:
-    build:
-      context: ..
-      dockerfile: packages/watchtower/Dockerfile
-    restart: unless-stopped
-    environment:
-      DATABASE_URL: postgresql+asyncpg://agentsentry:changeme@postgres:5432/agentsentry
-    ports:
-      - "8000:8000"
-    depends_on:
-      postgres:
-        condition: service_healthy
-
-  # -------------------------------------------------------------------------
-  # AgentScout — filesystem watcher + in-process Beacon parser
+  # Watchtower — FastAPI + SQLite API + Vite SPA + in-process JSONL watcher
+  #
+  # One service, one process, no Node runtime in production.
   #
   # IMPORTANT: Mount the agent log directory from the source machine.
   #   Option A (NFS/CIFS already mounted on Docker host):
@@ -46,40 +14,24 @@ services:
   #   Option C (Proxmox LXC bind-mount — set up on the Proxmox host):
   #     mp0: /mnt/host/agent-logs,mp=/data/agent-logs,ro=1
   # -------------------------------------------------------------------------
-  agent-scout:
+  watchtower:
     build:
       context: ..
-      dockerfile: packages/agent-scout/Dockerfile
+      dockerfile: packages/watchtower/Dockerfile
     restart: unless-stopped
     environment:
+      DATABASE_URL: sqlite+aiosqlite:////var/lib/agentsentry/agentsentry.db
       AGENT_DATA_DIR: /data/agent-logs
       STATE_DIR: /var/lib/agentsentry/scout
-      WATCHTOWER_URL: http://watchtower:8000
+      DASHBOARD_DIR: /app/dashboard-static
+    ports:
+      - "8000:8000"
     volumes:
+      # Persist the SQLite database and scout state across container restarts.
+      - agentsentry_data:/var/lib/agentsentry
       # Uncomment one of the options above and set the correct source path:
       # - /host/path/to/.claude:/data/agent-logs:ro
-      - scout_state:/var/lib/agentsentry/scout
-    depends_on:
-      - watchtower
-
-  # -------------------------------------------------------------------------
-  # AgentSentry Dashboard — Next.js standalone server
-  # -------------------------------------------------------------------------
-  dashboard:
-    build:
-      context: ..
-      dockerfile: packages/dashboard/Dockerfile
-    restart: unless-stopped
-    environment:
-      WATCHTOWER_URL: http://watchtower:8000
-      NEXT_TELEMETRY_DISABLED: "1"
-    ports:
-      - "3000:3000"
-    depends_on:
-      - watchtower
 
 volumes:
-  postgres_data:
-    driver: local
-  scout_state:
+  agentsentry_data:
     driver: local

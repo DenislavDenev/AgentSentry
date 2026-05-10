@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timezone
 
 from fastapi import APIRouter
@@ -93,12 +94,12 @@ async def _insert_record(rec: RecordIn, conn: AsyncConnection) -> None:
                     session_id, project_slug, record_type, model,
                     input_tokens, output_tokens, cache_read_tokens,
                     cache_create_5m_tokens, cache_create_1h_tokens,
-                    prompt_text, prompt_chars, is_sidechain, agent_id, recorded_at
+                    prompt_text, prompt_chars, is_sidechain, agent_id, recorded_at, tags
                 ) VALUES (
                     :uuid, :mid, :puuid,
                     :sid, :slug, :rtype, :model,
                     :in_tok, :out_tok, :cr_tok, :cc5_tok, :cc1_tok,
-                    :ptxt, :pchars, :sidechain, :agent_id, :recorded_at
+                    :ptxt, :pchars, :sidechain, :agent_id, :recorded_at, :tags
                 )
                 ON CONFLICT (uuid) DO UPDATE SET
                     input_tokens           = EXCLUDED.input_tokens,
@@ -108,7 +109,8 @@ async def _insert_record(rec: RecordIn, conn: AsyncConnection) -> None:
                     cache_create_1h_tokens = EXCLUDED.cache_create_1h_tokens,
                     parent_uuid            = EXCLUDED.parent_uuid,
                     model                  = EXCLUDED.model,
-                    recorded_at            = EXCLUDED.recorded_at
+                    recorded_at            = EXCLUDED.recorded_at,
+                    tags                   = EXCLUDED.tags
                 RETURNING uuid
             """),
             _msg_params(rec, ts),
@@ -133,12 +135,12 @@ async def _insert_record(rec: RecordIn, conn: AsyncConnection) -> None:
                     session_id, project_slug, record_type, model,
                     input_tokens, output_tokens, cache_read_tokens,
                     cache_create_5m_tokens, cache_create_1h_tokens,
-                    prompt_text, prompt_chars, is_sidechain, agent_id, recorded_at
+                    prompt_text, prompt_chars, is_sidechain, agent_id, recorded_at, tags
                 ) VALUES (
                     :uuid, :mid, :puuid,
                     :sid, :slug, :rtype, :model,
                     :in_tok, :out_tok, :cr_tok, :cc5_tok, :cc1_tok,
-                    :ptxt, :pchars, :sidechain, :agent_id, :recorded_at
+                    :ptxt, :pchars, :sidechain, :agent_id, :recorded_at, :tags
                 )
                 ON CONFLICT (uuid) DO NOTHING
                 RETURNING uuid
@@ -192,4 +194,5 @@ def _msg_params(rec: RecordIn, ts: int) -> dict:
         "sidechain": 1 if rec.is_sidechain else 0,
         "agent_id": rec.agent_id,
         "recorded_at": ts,
+        "tags": json.dumps(rec.tags),
     }

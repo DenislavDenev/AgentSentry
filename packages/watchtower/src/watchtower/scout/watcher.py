@@ -64,6 +64,7 @@ def _to_record_in(rec: TelemetryRecord):
         prompt_chars=rec.prompt_chars,
         is_sidechain=rec.is_sidechain,
         agent_id=rec.agent_id,
+        tags=rec.tags,
     )
 
 

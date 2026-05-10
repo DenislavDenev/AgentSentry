@@ -21,6 +21,29 @@ _TARGET_FIELDS: dict[str, str] = {
 }
 _TARGET_MAX_CHARS = 500
 
+# Basenames of Codex launcher scripts.  Add new names here if the companion
+# is renamed — this is the single place that needs updating.
+_CODEX_LAUNCHERS = frozenset(["codex-companion.mjs"])
+
+
+def is_codex_invocation(command: str) -> bool:
+    """Return True if any whitespace-delimited token in `command` is a known
+    Codex launcher script.
+
+    Simple basename match — no shell tokenizer needed since the file name is
+    distinctive enough that false positives are impossible in practice.
+    """
+    from pathlib import PurePath
+
+    for token in command.split():
+        try:
+            if PurePath(token).name in _CODEX_LAUNCHERS:
+                return True
+        except Exception:
+            pass
+    return False
+
+
 # Record types that carry no telemetry value
 _SKIP_TYPES = frozenset(
     [
@@ -127,6 +150,17 @@ class ClaudeCodeAdapter(BaseAdapter):
             tokens = _usage_tokens(record)
             content = msg.get("content") or []
             tool_calls = _extract_tool_uses(content)
+            # Tag records that invoke the Codex companion so the prompts page
+            # can filter by source.  Check every Bash tool call's command string.
+            tags: list[str] = []
+            for block in content:
+                if not isinstance(block, dict) or block.get("type") != "tool_use":
+                    continue
+                if block.get("name") == "Bash":
+                    cmd = (block.get("input") or {}).get("command", "")
+                    if cmd and is_codex_invocation(cmd):
+                        tags = ["codex"]
+                        break
             return TelemetryRecord(
                 uuid=uuid,
                 message_id=message_id,
@@ -139,6 +173,7 @@ class ClaudeCodeAdapter(BaseAdapter):
                 tool_calls=tool_calls,
                 is_sidechain=is_sidechain,
                 agent_id=agent_id,
+                tags=tags,
                 **tokens,
             )
 

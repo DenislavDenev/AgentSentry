@@ -12,6 +12,7 @@ router = APIRouter()
 async def list_prompts(
     limit: int = 50,
     days: int = 0,
+    source: str | None = None,
     conn: AsyncConnection = Depends(get_conn),
 ) -> list[PromptStat]:
     # Join each user prompt to the assistant response that has parent_uuid = prompt.uuid.
@@ -20,8 +21,19 @@ async def list_prompts(
     # ranking. Falls back to prompt_chars when no assistant response is linked yet.
     #
     # recorded_at is INTEGER epoch — emit as ISO-8601 Z for the API contract.
+    #
+    # ?source=codex filters to prompts whose linked assistant response has 'codex'
+    # in its tags JSON array (requires SQLite JSON1 extension, available since 3.38).
+    source_clause = ""
+    if source:
+        source_clause = (
+            "AND EXISTS ("
+            "  SELECT 1 FROM json_each(a.tags) WHERE value = :source"
+            ")"
+        )
+
     rows = await conn.execute(
-        text("""
+        text(f"""
             SELECT
                 u.uuid,
                 u.session_id,
@@ -46,9 +58,10 @@ async def list_prompts(
             WHERE u.record_type   = 'user'
               AND u.prompt_text   IS NOT NULL
               AND (:days = 0 OR u.recorded_at >= (strftime('%s','now') - :days * 86400))
+              {source_clause}
             ORDER BY billable_tokens DESC, u.prompt_chars DESC
             LIMIT :limit
         """),
-        {"limit": limit, "days": days},
+        {"limit": limit, "days": days, "source": source},
     )
     return [PromptStat(**dict(r._mapping)) for r in rows]

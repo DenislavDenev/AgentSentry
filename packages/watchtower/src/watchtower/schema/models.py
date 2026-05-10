@@ -30,6 +30,7 @@ class RecordIn(BaseModel):
     is_sidechain: bool = False
     agent_id: str | None = None
     source: str = "claude-code"
+    tags: list[str] = []
 
 
 class IngestRequest(BaseModel):
